@@ -5,7 +5,6 @@ import {
   jobScrapeNseDeals,
   jobScrapeBseDeals,
   jobScrapeMoneyControl,
-  jobScrapeTickertape,
   jobScrapeSebiShp,
   jobCheckTodayDeals,
   jobRunDiff,
@@ -19,7 +18,6 @@ function verifyCron(request: NextRequest): boolean {
   const authHeader = request.headers.get("authorization");
   if (authHeader === `Bearer ${CRON_SECRET}`) return true;
   if (!CRON_SECRET) return true;
-  // Vercel Cron sends the secret as a query param too
   const { searchParams } = new URL(request.url);
   if (searchParams.get("secret") === CRON_SECRET) return true;
   return false;
@@ -42,7 +40,6 @@ export async function GET(request: NextRequest) {
         break;
       case "trendlyne":
         result = await jobScrapeTrendlyne();
-        // After trendlyne scrape, run diff to detect changes
         await jobRunDiff().catch(() => null);
         break;
       case "nse":
@@ -53,10 +50,6 @@ export async function GET(request: NextRequest) {
         break;
       case "moneycontrol":
         result = await jobScrapeMoneyControl();
-        break;
-      case "tickertape":
-        result = await jobScrapeTickertape();
-        await jobRunDiff().catch(() => null);
         break;
       case "sebi-shp":
         result = await jobScrapeSebiShp();
@@ -75,11 +68,7 @@ export async function GET(request: NextRequest) {
         result = await jobTakePortfolioSnapshot();
         break;
       case "all-deals": {
-        // Run all deal scrapers in parallel where safe, sequential for rate limits
-        const [trendlyne, tickertape] = await Promise.allSettled([
-          jobScrapeTrendlyne(),
-          jobScrapeTickertape(),
-        ]);
+        const [trendlyne] = await Promise.allSettled([jobScrapeTrendlyne()]);
         await new Promise((r) => setTimeout(r, 2000));
         const [nse, bse] = await Promise.allSettled([
           jobScrapeNseDeals(),
@@ -91,7 +80,7 @@ export async function GET(request: NextRequest) {
           jobScrapeSebiShp(),
         ]);
         await jobRunDiff().catch(() => null);
-        result = { trendlyne, tickertape, nse, bse, mc, sebi };
+        result = { trendlyne, nse, bse, mc, sebi };
         break;
       }
       default:
@@ -100,7 +89,7 @@ export async function GET(request: NextRequest) {
             error: `Unknown job: ${job}`,
             valid: [
               "prices", "trendlyne", "nse", "bse", "moneycontrol",
-              "tickertape", "sebi-shp", "today-deals", "diff",
+              "sebi-shp", "today-deals", "diff",
               "fundamentals", "snapshot", "all-deals"
             ]
           },

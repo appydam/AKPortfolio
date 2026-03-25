@@ -4,7 +4,6 @@ import { scrapeBseBulkDeals, scrapeBseAnnouncements } from "../scrapers/bse-rss"
 import { scrapeNseBulkDeals, scrapeNseBlockDeals } from "../scrapers/nse-csv";
 import { scrapeMoneyControlBulkDeals } from "../scrapers/moneycontrol";
 import { scrapeBseBulkDealsCsv, scrapeBseBlockDealsCsv } from "../scrapers/bse-csv";
-import { scrapeTickertapeHoldings, scrapeTickertapeActivity } from "../scrapers/tickertape";
 import { scrapeSebiShp, scanBseFilingsRss } from "../scrapers/sebi-shp";
 import { checkTodayDeals } from "../scrapers/today-deals";
 import { runDiffAndAlert } from "../analytics/deal-diff";
@@ -106,22 +105,6 @@ export async function jobScrapeMoneyControl(): Promise<{ skipped: boolean }> {
   return { skipped: false };
 }
 
-// NEW: Tickertape — runs every 4 hours
-export async function jobScrapeTickertape(): Promise<{ skipped: boolean; holdings: number; activity: number }> {
-  if (shouldSkipSource("tickertape")) {
-    return { skipped: true, holdings: 0, activity: 0 };
-  }
-  console.log("[Jobs] Running Tickertape scrape...");
-  const [holdings, activity] = await Promise.allSettled([
-    scrapeTickertapeHoldings(),
-    scrapeTickertapeActivity(),
-  ]);
-  return {
-    skipped: false,
-    holdings: holdings.status === "fulfilled" ? holdings.value : 0,
-    activity: activity.status === "fulfilled" ? activity.value : 0,
-  };
-}
 
 // NEW: SEBI SHP — runs daily at 8 PM IST (after filing window)
 export async function jobScrapeSebiShp(): Promise<{ updated: number; rssAlerts: number }> {
