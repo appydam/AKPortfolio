@@ -6,47 +6,56 @@ export async function GET() {
   try {
     const db = getDb();
 
-    const latestQuarter = db
-      .prepare("SELECT quarter FROM holdings ORDER BY quarter DESC LIMIT 1")
-      .get() as { quarter: string } | undefined;
+    const { data: latestQuarterRow } = await db
+      .from("holdings")
+      .select("quarter")
+      .order("quarter", { ascending: false })
+      .limit(1)
+      .single();
 
-    if (!latestQuarter) {
+    if (!latestQuarterRow) {
       return NextResponse.json({ holdings: [], totalValue: 0, quarter: null });
     }
 
-    const holdings = db
-      .prepare(`
-        SELECT h.*, s.symbol, s.name as stock_name, s.sector, s.pe_ratio, s.market_cap, s.roe, s.roce
-        FROM holdings h
-        JOIN stocks s ON h.stock_id = s.id
-        WHERE h.quarter = ?
-        ORDER BY h.pct_holding DESC
-      `)
-      .all(latestQuarter.quarter) as Array<{
-        id: number;
-        stock_id: number;
-        quarter: string;
-        shares_held: number;
-        pct_holding: number;
-        symbol: string;
-        stock_name: string;
-        sector: string | null;
-        pe_ratio: number | null;
-        market_cap: number | null;
-        roe: number | null;
-        roce: number | null;
-      }>;
+    const quarter = latestQuarterRow.quarter;
+
+    // Fetch holdings for the latest quarter
+    const { data: holdingsData, error: holdingsError } = await db
+      .from("holdings")
+      .select("*, stocks(symbol, name, sector, pe_ratio, market_cap, roe, roce)")
+      .eq("quarter", quarter)
+      .order("pct_holding", { ascending: false });
+
+    if (holdingsError) throw holdingsError;
+
+    const holdings = (holdingsData || []).map((h: Record<string, unknown>) => {
+      const stock = h.stocks as unknown as Record<string, unknown> | null;
+      return {
+        id: h.id,
+        stock_id: h.stock_id,
+        quarter: h.quarter,
+        shares_held: h.shares_held,
+        pct_holding: h.pct_holding,
+        symbol: stock?.symbol ?? null,
+        stock_name: stock?.name ?? null,
+        sector: stock?.sector ?? null,
+        pe_ratio: stock?.pe_ratio ?? null,
+        market_cap: stock?.market_cap ?? null,
+        roe: stock?.roe ?? null,
+        roce: stock?.roce ?? null,
+      };
+    });
 
     // Use multi-source aggregated prices
-    const symbols = holdings.map((h) => h.symbol);
+    const symbols = holdings.map((h: Record<string, unknown>) => h.symbol as string).filter(Boolean);
     const prices = await getAggregatedPrices(symbols);
 
     let totalValue = 0;
-    const enriched = holdings.map((h) => {
-      const priceData = prices[h.symbol];
+    const enriched = holdings.map((h: Record<string, unknown>) => {
+      const priceData = prices[h.symbol as string];
       const currentPrice = priceData?.price || 0;
       const changePct = priceData?.change_pct || 0;
-      const marketValue = currentPrice * h.shares_held;
+      const marketValue = currentPrice * (h.shares_held as number);
       totalValue += marketValue;
 
       return {
@@ -60,7 +69,7 @@ export async function GET() {
     return NextResponse.json({
       holdings: enriched,
       totalValue,
-      quarter: latestQuarter.quarter,
+      quarter,
     });
   } catch (error) {
     console.error("[API] Holdings error:", error);

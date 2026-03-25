@@ -5,15 +5,14 @@ export async function GET() {
   try {
     const db = getDb();
 
-    const snapshots = db
-      .prepare(`
-        SELECT snapshot_date, total_value, num_holdings
-        FROM portfolio_snapshots
-        ORDER BY snapshot_date ASC
-      `)
-      .all();
+    const { data: snapshots, error } = await db
+      .from("portfolio_snapshots")
+      .select("snapshot_date, total_value, num_holdings")
+      .order("snapshot_date", { ascending: true });
 
-    return NextResponse.json({ snapshots });
+    if (error) throw error;
+
+    return NextResponse.json({ snapshots: snapshots || [] });
   } catch (error) {
     console.error("[API] Portfolio history error:", error);
     return NextResponse.json({ error: "Failed to fetch portfolio history" }, { status: 500 });

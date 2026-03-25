@@ -11,36 +11,49 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get("action");
     const offset = (page - 1) * limit;
 
-    let whereClause = "";
-    const params: (string | number)[] = [];
+    // Count total
+    let countQuery = db
+      .from("deals")
+      .select("*", { count: "exact", head: true });
 
     if (action) {
-      whereClause = "WHERE d.action = ?";
-      params.push(action);
+      countQuery = countQuery.eq("action", action);
     }
 
-    const total = db
-      .prepare(`SELECT COUNT(*) as count FROM deals d ${whereClause}`)
-      .get(...params) as { count: number };
+    const { count: total } = await countQuery;
 
-    params.push(limit, offset);
+    // Fetch deals with stock info
+    let dealsQuery = db
+      .from("deals")
+      .select("*, stocks(symbol, name)")
+      .order("deal_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    const deals = db
-      .prepare(`
-        SELECT d.*, s.symbol, s.name as stock_name
-        FROM deals d
-        JOIN stocks s ON d.stock_id = s.id
-        ${whereClause}
-        ORDER BY d.deal_date DESC, d.created_at DESC
-        LIMIT ? OFFSET ?
-      `)
-      .all(...params);
+    if (action) {
+      dealsQuery = dealsQuery.eq("action", action);
+    }
+
+    const { data: dealsData, error } = await dealsQuery;
+    if (error) throw error;
+
+    const deals = (dealsData || []).map((d: Record<string, unknown>) => {
+      const stock = d.stocks as unknown as Record<string, unknown> | null;
+      const { stocks: _stocks, ...rest } = d;
+      return {
+        ...rest,
+        symbol: stock?.symbol ?? null,
+        stock_name: stock?.name ?? null,
+      };
+    });
+
+    const totalCount = total || 0;
 
     return NextResponse.json({
       deals,
-      total: total.count,
+      total: totalCount,
       page,
-      totalPages: Math.ceil(total.count / limit),
+      totalPages: Math.ceil(totalCount / limit),
     });
   } catch (error) {
     console.error("[API] Deals error:", error);

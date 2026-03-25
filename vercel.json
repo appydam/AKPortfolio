@@ -1,0 +1,32 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron?job=prices",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron?job=trendlyne",
+      "schedule": "0 */2 * * 1-5"
+    },
+    {
+      "path": "/api/cron?job=nse",
+      "schedule": "30 */3 * * 1-5"
+    },
+    {
+      "path": "/api/cron?job=bse",
+      "schedule": "0 1,4,7,10,13,16 * * 1-5"
+    },
+    {
+      "path": "/api/cron?job=moneycontrol",
+      "schedule": "15 */4 * * 1-5"
+    },
+    {
+      "path": "/api/cron?job=fundamentals",
+      "schedule": "30 1 * * *"
+    },
+    {
+      "path": "/api/cron?job=snapshot",
+      "schedule": "30 10 * * 1-5"
+    }
+  ]
+}

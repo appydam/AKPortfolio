@@ -1,4 +1,4 @@
-import { getDb } from "../db";
+import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
 
 // NSE publishes daily bulk deal CSV/archives
@@ -15,20 +15,6 @@ const ASHISH_KACHOLIA_VARIANTS = [
 function isAshishKacholia(clientName: string): boolean {
   const lower = clientName.toLowerCase();
   return ASHISH_KACHOLIA_VARIANTS.some((v) => lower.includes(v));
-}
-
-function ensureStock(symbol: string, name: string): number {
-  const db = getDb();
-  const existing = db
-    .prepare("SELECT id FROM stocks WHERE symbol = ?")
-    .get(symbol) as { id: number } | undefined;
-
-  if (existing) return existing.id;
-
-  const result = db
-    .prepare("INSERT INTO stocks (symbol, name) VALUES (?, ?)")
-    .run(symbol, name);
-  return result.lastInsertRowid as number;
 }
 
 // NSE requires session cookies just like for quotes
@@ -112,11 +98,6 @@ export async function scrapeNseBulkDeals(daysBack: number = 7): Promise<number> 
     const db = getDb();
     let newDeals = 0;
 
-    const insertDeal = db.prepare(`
-      INSERT OR IGNORE INTO deals (stock_id, deal_date, exchange, deal_type, action, quantity, avg_price, pct_traded)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
     for (const deal of deals) {
       if (!isAshishKacholia(deal.BD_CLIENT_NAME || "")) continue;
 
@@ -129,20 +110,23 @@ export async function scrapeNseBulkDeals(daysBack: number = 7): Promise<number> 
 
       if (!symbol || !quantity) continue;
 
-      const stockId = ensureStock(symbol, name);
+      const stockId = await ensureStock(symbol, name);
 
-      const result = insertDeal.run(
-        stockId,
-        deal.BD_DT_DATE || formatDate(new Date()),
-        "NSE",
-        "Bulk",
-        action,
-        quantity,
-        avgPrice,
-        null
-      );
+      const { data: insertedData } = await db.from("deals").upsert(
+        {
+          stock_id: stockId,
+          deal_date: deal.BD_DT_DATE || formatDate(new Date()),
+          exchange: "NSE",
+          deal_type: "Bulk",
+          action,
+          quantity,
+          avg_price: avgPrice,
+          pct_traded: null,
+        },
+        { onConflict: "stock_id,deal_date,exchange,deal_type,action,quantity", ignoreDuplicates: true }
+      ).select("id");
 
-      if (result.changes > 0) newDeals++;
+      if (insertedData && insertedData.length > 0) newDeals++;
     }
 
     const latency = Date.now() - start;
@@ -188,11 +172,6 @@ export async function scrapeNseBlockDeals(daysBack: number = 7): Promise<number>
     const db = getDb();
     let newDeals = 0;
 
-    const insertDeal = db.prepare(`
-      INSERT OR IGNORE INTO deals (stock_id, deal_date, exchange, deal_type, action, quantity, avg_price, pct_traded)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
     for (const deal of deals) {
       if (!isAshishKacholia(deal.BD_CLIENT_NAME || "")) continue;
 
@@ -201,20 +180,23 @@ export async function scrapeNseBlockDeals(daysBack: number = 7): Promise<number>
       const action =
         (deal.BD_BUY_SELL || "").toLowerCase() === "buy" ? "Buy" : "Sell";
 
-      const stockId = ensureStock(symbol, name);
+      const stockId = await ensureStock(symbol, name);
 
-      const result = insertDeal.run(
-        stockId,
-        deal.BD_DT_DATE || formatDate(new Date()),
-        "NSE",
-        "Block",
-        action,
-        deal.BD_QTY_TRD || 0,
-        deal.BD_TP_WATP || 0,
-        null
-      );
+      const { data: insertedData } = await db.from("deals").upsert(
+        {
+          stock_id: stockId,
+          deal_date: deal.BD_DT_DATE || formatDate(new Date()),
+          exchange: "NSE",
+          deal_type: "Block",
+          action,
+          quantity: deal.BD_QTY_TRD || 0,
+          avg_price: deal.BD_TP_WATP || 0,
+          pct_traded: null,
+        },
+        { onConflict: "stock_id,deal_date,exchange,deal_type,action,quantity", ignoreDuplicates: true }
+      ).select("id");
 
-      if (result.changes > 0) newDeals++;
+      if (insertedData && insertedData.length > 0) newDeals++;
     }
 
     const latency = Date.now() - start;

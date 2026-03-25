@@ -1,4 +1,3 @@
-import cron from "node-cron";
 import { scrapeTrendlyne } from "../scrapers/trendlyne";
 import { updateAllFundamentals } from "../scrapers/screener";
 import { scrapeBseBulkDeals, scrapeBseAnnouncements } from "../scrapers/bse-rss";
@@ -25,186 +24,196 @@ function isMarketHours(): boolean {
   return timeInMinutes >= 555 && timeInMinutes <= 930; // 9:15 AM - 3:30 PM IST
 }
 
-export function startScheduler() {
-  console.log("[Scheduler] Starting background jobs with multi-source support...");
+// ─────────────────────────────────────────────
+// Individual job functions callable by Vercel Cron API routes
+// ─────────────────────────────────────────────
 
-  // ─────────────────────────────────────────────
-  // PRICE REFRESH: Every 5 seconds during market hours
-  // Uses NSE > Google > Yahoo failover chain
-  // ─────────────────────────────────────────────
-  let priceRefreshInterval: ReturnType<typeof setInterval> | null = null;
-
-  function startPricePolling() {
-    if (priceRefreshInterval) return;
-    console.log("[Scheduler] Starting 5-second price polling");
-    priceRefreshInterval = setInterval(async () => {
-      if (!isMarketHours()) {
-        stopPricePolling();
-        return;
-      }
-      try {
-        await refreshAllAggregatedPrices();
-      } catch (error) {
-        console.error("[Scheduler] Price refresh failed:", error);
-      }
-    }, 5_000);
+/**
+ * Refresh all aggregated prices.
+ * Call from a Vercel Cron route on a frequent schedule during market hours.
+ */
+export async function jobRefreshPrices(): Promise<{ refreshed: number }> {
+  console.log("[Jobs] Running price refresh...");
+  try {
+    const count = await refreshAllAggregatedPrices();
+    console.log(`[Jobs] Refreshed ${count} prices`);
+    return { refreshed: count };
+  } catch (error) {
+    console.error("[Jobs] Price refresh failed:", error);
+    throw error;
   }
-
-  function stopPricePolling() {
-    if (priceRefreshInterval) {
-      console.log("[Scheduler] Stopping price polling (market closed)");
-      clearInterval(priceRefreshInterval);
-      priceRefreshInterval = null;
-    }
-  }
-
-  // Check every minute if we should start/stop price polling
-  cron.schedule("* * * * *", () => {
-    if (isMarketHours()) {
-      startPricePolling();
-    } else {
-      stopPricePolling();
-    }
-  });
-
-  // Also do a single price refresh every 5 minutes outside market hours
-  cron.schedule("*/5 * * * *", async () => {
-    if (!isMarketHours()) {
-      try {
-        await refreshAllAggregatedPrices();
-      } catch (error) {
-        console.error("[Scheduler] Off-hours price refresh failed:", error);
-      }
-    }
-  });
-
-  // ─────────────────────────────────────────────
-  // DEAL SCRAPING: Multiple sources, staggered
-  // ─────────────────────────────────────────────
-
-  // Trendlyne: Every 2 hours on weekdays
-  cron.schedule("0 */2 * * 1-5", async () => {
-    if (shouldSkipSource("trendlyne")) return;
-    console.log("[Scheduler] Running Trendlyne scrape...");
-    try {
-      await scrapeTrendlyne();
-    } catch (error) {
-      console.error("[Scheduler] Trendlyne failed:", error);
-    }
-  });
-
-  // NSE Bulk Deals: Every 3 hours on weekdays
-  cron.schedule("30 */3 * * 1-5", async () => {
-    if (shouldSkipSource("nse-csv")) return;
-    console.log("[Scheduler] Running NSE bulk deals scrape...");
-    try {
-      await scrapeNseBulkDeals(7);
-      await new Promise((r) => setTimeout(r, 2000));
-      await scrapeNseBlockDeals(7);
-    } catch (error) {
-      console.error("[Scheduler] NSE deals failed:", error);
-    }
-  });
-
-  // BSE Bulk Deals: Every 3 hours on weekdays (offset by 1h from NSE)
-  cron.schedule("0 1,4,7,10,13,16 * * 1-5", async () => {
-    if (shouldSkipSource("bse-rss")) return;
-    console.log("[Scheduler] Running BSE bulk deals scrape...");
-    try {
-      await scrapeBseBulkDeals();
-      await new Promise((r) => setTimeout(r, 2000));
-      await scrapeBseAnnouncements();
-    } catch (error) {
-      console.error("[Scheduler] BSE deals failed:", error);
-    }
-  });
-
-  // MoneyControl: Every 4 hours on weekdays
-  cron.schedule("15 */4 * * 1-5", async () => {
-    if (shouldSkipSource("moneycontrol")) return;
-    console.log("[Scheduler] Running MoneyControl scrape...");
-    try {
-      await scrapeMoneyControlBulkDeals();
-    } catch (error) {
-      console.error("[Scheduler] MoneyControl failed:", error);
-    }
-  });
-
-  // ─────────────────────────────────────────────
-  // FUNDAMENTALS: Daily
-  // ─────────────────────────────────────────────
-
-  // Screener fundamentals: daily at 7 AM IST (1:30 AM UTC)
-  cron.schedule("30 1 * * *", async () => {
-    if (shouldSkipSource("screener")) return;
-    console.log("[Scheduler] Running Screener fundamentals update...");
-    try {
-      await updateAllFundamentals();
-    } catch (error) {
-      console.error("[Scheduler] Screener update failed:", error);
-    }
-  });
-
-  // ─────────────────────────────────────────────
-  // PORTFOLIO SNAPSHOT: Daily at 4 PM IST
-  // ─────────────────────────────────────────────
-  cron.schedule("30 10 * * 1-5", async () => {
-    console.log("[Scheduler] Taking portfolio snapshot...");
-    try {
-      await takePortfolioSnapshot();
-    } catch (error) {
-      console.error("[Scheduler] Snapshot failed:", error);
-    }
-  });
-
-  console.log("[Scheduler] All jobs scheduled:");
-  console.log("  - Prices: Every 5s during market hours (NSE > Google > Yahoo)");
-  console.log("  - Trendlyne deals: Every 2h (weekdays)");
-  console.log("  - NSE bulk/block deals: Every 3h (weekdays)");
-  console.log("  - BSE bulk deals + RSS: Every 3h offset (weekdays)");
-  console.log("  - MoneyControl deals: Every 4h (weekdays)");
-  console.log("  - Screener fundamentals: Daily 7 AM IST");
-  console.log("  - Portfolio snapshot: Daily 4 PM IST");
 }
 
-async function takePortfolioSnapshot() {
+/**
+ * Scrape deals from Trendlyne.
+ * Call from a Vercel Cron route every 2 hours on weekdays.
+ */
+export async function jobScrapeTrendlyne(): Promise<{ skipped: boolean; result?: unknown }> {
+  if (shouldSkipSource("trendlyne")) {
+    console.log("[Jobs] Skipping Trendlyne (source unhealthy)");
+    return { skipped: true };
+  }
+  console.log("[Jobs] Running Trendlyne scrape...");
+  try {
+    const result = await scrapeTrendlyne();
+    return { skipped: false, result };
+  } catch (error) {
+    console.error("[Jobs] Trendlyne failed:", error);
+    throw error;
+  }
+}
+
+/**
+ * Scrape NSE bulk and block deals.
+ * Call from a Vercel Cron route every 3 hours on weekdays.
+ */
+export async function jobScrapeNseDeals(): Promise<{ skipped: boolean }> {
+  if (shouldSkipSource("nse-csv")) {
+    console.log("[Jobs] Skipping NSE CSV (source unhealthy)");
+    return { skipped: true };
+  }
+  console.log("[Jobs] Running NSE bulk/block deals scrape...");
+  try {
+    await scrapeNseBulkDeals(7);
+    await new Promise((r) => setTimeout(r, 2000));
+    await scrapeNseBlockDeals(7);
+    return { skipped: false };
+  } catch (error) {
+    console.error("[Jobs] NSE deals failed:", error);
+    throw error;
+  }
+}
+
+/**
+ * Scrape BSE bulk deals and announcements.
+ * Call from a Vercel Cron route every 3 hours (offset from NSE) on weekdays.
+ */
+export async function jobScrapeBseDeals(): Promise<{ skipped: boolean }> {
+  if (shouldSkipSource("bse-rss")) {
+    console.log("[Jobs] Skipping BSE RSS (source unhealthy)");
+    return { skipped: true };
+  }
+  console.log("[Jobs] Running BSE bulk deals scrape...");
+  try {
+    await scrapeBseBulkDeals();
+    await new Promise((r) => setTimeout(r, 2000));
+    await scrapeBseAnnouncements();
+    return { skipped: false };
+  } catch (error) {
+    console.error("[Jobs] BSE deals failed:", error);
+    throw error;
+  }
+}
+
+/**
+ * Scrape MoneyControl bulk deals.
+ * Call from a Vercel Cron route every 4 hours on weekdays.
+ */
+export async function jobScrapeMoneyControl(): Promise<{ skipped: boolean }> {
+  if (shouldSkipSource("moneycontrol")) {
+    console.log("[Jobs] Skipping MoneyControl (source unhealthy)");
+    return { skipped: true };
+  }
+  console.log("[Jobs] Running MoneyControl scrape...");
+  try {
+    await scrapeMoneyControlBulkDeals();
+    return { skipped: false };
+  } catch (error) {
+    console.error("[Jobs] MoneyControl failed:", error);
+    throw error;
+  }
+}
+
+/**
+ * Update stock fundamentals from Screener.
+ * Call from a Vercel Cron route daily.
+ */
+export async function jobUpdateFundamentals(): Promise<{ skipped: boolean }> {
+  if (shouldSkipSource("screener")) {
+    console.log("[Jobs] Skipping Screener (source unhealthy)");
+    return { skipped: true };
+  }
+  console.log("[Jobs] Running Screener fundamentals update...");
+  try {
+    await updateAllFundamentals();
+    return { skipped: false };
+  } catch (error) {
+    console.error("[Jobs] Screener update failed:", error);
+    throw error;
+  }
+}
+
+/**
+ * Take a portfolio snapshot.
+ * Call from a Vercel Cron route daily at 4 PM IST on weekdays.
+ */
+export async function jobTakePortfolioSnapshot(): Promise<{
+  holdings: number;
+  totalValue: number;
+}> {
+  console.log("[Jobs] Taking portfolio snapshot...");
   const db = getDb();
 
-  const holdings = db
-    .prepare(`
-      SELECT h.shares_held, s.symbol
-      FROM holdings h
-      JOIN stocks s ON h.stock_id = s.id
-      WHERE h.quarter = (SELECT quarter FROM holdings ORDER BY quarter DESC LIMIT 1)
-    `)
-    .all() as { shares_held: number; symbol: string }[];
+  // Get latest quarter
+  const { data: latestRow } = await db
+    .from("holdings")
+    .select("quarter")
+    .order("quarter", { ascending: false })
+    .limit(1)
+    .single();
 
-  if (holdings.length === 0) return;
+  if (!latestRow) return { holdings: 0, totalValue: 0 };
+
+  // Get holdings with stock symbols
+  const { data: holdingsData } = await db
+    .from("holdings")
+    .select("shares_held, stocks(symbol)")
+    .eq("quarter", latestRow.quarter);
+
+  if (!holdingsData || holdingsData.length === 0) return { holdings: 0, totalValue: 0 };
+
+  // Get all prices
+  const symbols = (holdingsData || []).map((h: Record<string, unknown>) => {
+    const stock = h.stocks as unknown as Record<string, unknown> | null;
+    return stock?.symbol as string;
+  }).filter(Boolean);
+
+  const { data: pricesData } = await db
+    .from("price_cache")
+    .select("symbol, price")
+    .in("symbol", symbols);
+
+  const priceMap = new Map<string, number>();
+  for (const p of pricesData || []) {
+    priceMap.set(p.symbol, p.price);
+  }
 
   let totalValue = 0;
   const details: Record<string, { shares: number; price: number; value: number }> = {};
 
-  for (const h of holdings) {
-    const cached = db
-      .prepare("SELECT price FROM price_cache WHERE symbol = ?")
-      .get(h.symbol) as { price: number } | undefined;
-
-    const price = cached?.price || 0;
-    const value = price * h.shares_held;
+  for (const h of holdingsData) {
+    const stock = h.stocks as unknown as Record<string, unknown> | null;
+    const symbol = (stock?.symbol as string) || "";
+    const price = priceMap.get(symbol) || 0;
+    const value = price * (h.shares_held as number);
     totalValue += value;
-    details[h.symbol] = { shares: h.shares_held, price, value };
+    details[symbol] = { shares: h.shares_held as number, price, value };
   }
 
   const today = new Date().toISOString().split("T")[0];
 
-  db.prepare(`
-    INSERT INTO portfolio_snapshots (snapshot_date, total_value, num_holdings, details_json)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(snapshot_date) DO UPDATE SET
-      total_value = excluded.total_value,
-      num_holdings = excluded.num_holdings,
-      details_json = excluded.details_json
-  `).run(today, totalValue, holdings.length, JSON.stringify(details));
+  await db
+    .from("portfolio_snapshots")
+    .upsert(
+      {
+        snapshot_date: today,
+        total_value: totalValue,
+        num_holdings: holdingsData.length,
+        details_json: JSON.stringify(details),
+      },
+      { onConflict: "snapshot_date" }
+    );
 
-  console.log(`[Scheduler] Snapshot: ${holdings.length} holdings, total ₹${(totalValue / 10000000).toFixed(2)} Cr`);
+  console.log(`[Jobs] Snapshot: ${holdingsData.length} holdings, total ₹${(totalValue / 10000000).toFixed(2)} Cr`);
+  return { holdings: holdingsData.length, totalValue };
 }

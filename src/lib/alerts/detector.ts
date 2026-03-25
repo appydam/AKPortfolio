@@ -1,31 +1,29 @@
 import { getDb } from "../db";
 import type { Deal } from "@/types";
 
-export function detectNewAlerts(newDeals: Deal[]): number {
+export async function detectNewAlerts(newDeals: Deal[]): Promise<number> {
   const db = getDb();
   let alertCount = 0;
 
-  const insertAlert = db.prepare(`
-    INSERT INTO alerts (stock_id, alert_type, message, deal_id)
-    VALUES (?, ?, ?, ?)
-  `);
-
   for (const deal of newDeals) {
-    const stock = db
-      .prepare("SELECT symbol, name FROM stocks WHERE id = ?")
-      .get(deal.stock_id) as { symbol: string; name: string } | undefined;
+    const { data: stock } = await db
+      .from("stocks")
+      .select("symbol, name")
+      .eq("id", deal.stock_id)
+      .single();
 
     if (!stock) continue;
 
     // Check if this is a new entry (first deal for this stock)
-    const dealCount = db
-      .prepare("SELECT COUNT(*) as count FROM deals WHERE stock_id = ?")
-      .get(deal.stock_id) as { count: number };
+    const { count: dealCount } = await db
+      .from("deals")
+      .select("*", { count: "exact", head: true })
+      .eq("stock_id", deal.stock_id);
 
     let alertType: string;
     let message: string;
 
-    if (deal.action === "Buy" && dealCount.count === 1) {
+    if (deal.action === "Buy" && (dealCount || 0) === 1) {
       alertType = "NEW_ENTRY";
       message = `New portfolio entry: ${stock.name} (${stock.symbol}) — Bought ${deal.quantity.toLocaleString()} shares at ₹${deal.avg_price}`;
     } else if (deal.action === "Buy") {
@@ -33,9 +31,13 @@ export function detectNewAlerts(newDeals: Deal[]): number {
       message = `${stock.name} (${stock.symbol}) — Bought ${deal.quantity.toLocaleString()} shares at ₹${deal.avg_price}`;
     } else {
       // Check if this might be a full exit
-      const holding = db
-        .prepare("SELECT shares_held FROM holdings WHERE stock_id = ? ORDER BY quarter DESC LIMIT 1")
-        .get(deal.stock_id) as { shares_held: number } | undefined;
+      const { data: holding } = await db
+        .from("holdings")
+        .select("shares_held")
+        .eq("stock_id", deal.stock_id)
+        .order("quarter", { ascending: false })
+        .limit(1)
+        .single();
 
       if (holding && deal.quantity >= holding.shares_held) {
         alertType = "EXIT";
@@ -46,7 +48,15 @@ export function detectNewAlerts(newDeals: Deal[]): number {
       }
     }
 
-    insertAlert.run(deal.stock_id, alertType, message, deal.id);
+    await db
+      .from("alerts")
+      .insert({
+        stock_id: deal.stock_id,
+        alert_type: alertType,
+        message,
+        deal_id: deal.id,
+      });
+
     alertCount++;
   }
 
@@ -54,26 +64,33 @@ export function detectNewAlerts(newDeals: Deal[]): number {
   return alertCount;
 }
 
-export function getUnreadAlerts() {
+export async function getUnreadAlerts() {
   const db = getDb();
-  return db
-    .prepare(`
-      SELECT a.*, s.symbol, s.name as stock_name
-      FROM alerts a
-      JOIN stocks s ON a.stock_id = s.id
-      WHERE a.is_read = 0
-      ORDER BY a.created_at DESC
-      LIMIT 50
-    `)
-    .all();
+
+  const { data: alertsData } = await db
+    .from("alerts")
+    .select("*, stocks(symbol, name)")
+    .eq("is_read", false)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  return (alertsData || []).map((a: Record<string, unknown>) => {
+    const stock = a.stocks as unknown as Record<string, unknown> | null;
+    const { stocks: _stocks, ...rest } = a;
+    return {
+      ...rest,
+      symbol: stock?.symbol ?? null,
+      stock_name: stock?.name ?? null,
+    };
+  });
 }
 
-export function markAlertRead(alertId: number) {
+export async function markAlertRead(alertId: number) {
   const db = getDb();
-  db.prepare("UPDATE alerts SET is_read = 1 WHERE id = ?").run(alertId);
+  await db.from("alerts").update({ is_read: true }).eq("id", alertId);
 }
 
-export function markAllAlertsRead() {
+export async function markAllAlertsRead() {
   const db = getDb();
-  db.prepare("UPDATE alerts SET is_read = 1 WHERE is_read = 0").run();
+  await db.from("alerts").update({ is_read: true }).eq("is_read", false);
 }

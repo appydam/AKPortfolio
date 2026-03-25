@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { getDb } from "../db";
+import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
 
 // BSE Corporate filings — bulk deal reports
@@ -36,20 +36,6 @@ function isAshishKacholia(clientName: string): boolean {
   return ASHISH_KACHOLIA_VARIANTS.some((v) => lower.includes(v));
 }
 
-function ensureStock(symbol: string, name: string): number {
-  const db = getDb();
-  const existing = db
-    .prepare("SELECT id FROM stocks WHERE symbol = ? OR name = ?")
-    .get(symbol, name) as { id: number } | undefined;
-
-  if (existing) return existing.id;
-
-  const result = db
-    .prepare("INSERT INTO stocks (symbol, name) VALUES (?, ?)")
-    .run(symbol, name);
-  return result.lastInsertRowid as number;
-}
-
 export async function scrapeBseBulkDeals(): Promise<number> {
   console.log("[BSE] Scraping bulk deals...");
   const start = Date.now();
@@ -65,12 +51,17 @@ export async function scrapeBseBulkDeals(): Promise<number> {
     const db = getDb();
     let newDeals = 0;
 
-    const insertDeal = db.prepare(`
-      INSERT OR IGNORE INTO deals (stock_id, deal_date, exchange, deal_type, action, quantity, avg_price, pct_traded)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
     // BSE bulk deals page has a table with deal data
+    const rows: Array<{
+      dealDate: string;
+      stockCode: string;
+      stockName: string;
+      clientName: string;
+      dealTypeRaw: string;
+      quantity: number;
+      avgPrice: number;
+    }> = [];
+
     $("table#ContentPlaceHolder1_gvbulk tr, table.mktdet_1 tr, table tbody tr").each(
       (i, row) => {
         if (i === 0) return; // Skip header row
@@ -89,29 +80,36 @@ export async function scrapeBseBulkDeals(): Promise<number> {
         // Filter for Ashish Kacholia
         if (!isAshishKacholia(clientName)) return;
 
-        const action = dealTypeRaw.toLowerCase().includes("buy") || dealTypeRaw.toLowerCase().includes("purchase")
-          ? "Buy"
-          : "Sell";
-
-        // Extract or guess symbol from stock name
-        const symbol = stockCode || stockName.replace(/\s+/g, "").substring(0, 20).toUpperCase();
-
-        const stockId = ensureStock(symbol, stockName);
-
-        const result = insertDeal.run(
-          stockId,
-          dealDate,
-          "BSE",
-          "Bulk",
-          action,
-          quantity,
-          avgPrice,
-          null
-        );
-
-        if (result.changes > 0) newDeals++;
+        rows.push({ dealDate, stockCode, stockName, clientName, dealTypeRaw, quantity, avgPrice });
       }
     );
+
+    for (const r of rows) {
+      const action = r.dealTypeRaw.toLowerCase().includes("buy") || r.dealTypeRaw.toLowerCase().includes("purchase")
+        ? "Buy"
+        : "Sell";
+
+      // Extract or guess symbol from stock name
+      const symbol = r.stockCode || r.stockName.replace(/\s+/g, "").substring(0, 20).toUpperCase();
+
+      const stockId = await ensureStock(symbol, r.stockName);
+
+      const { data } = await db.from("deals").upsert(
+        {
+          stock_id: stockId,
+          deal_date: r.dealDate,
+          exchange: "BSE",
+          deal_type: "Bulk",
+          action,
+          quantity: r.quantity,
+          avg_price: r.avgPrice,
+          pct_traded: null,
+        },
+        { onConflict: "stock_id,deal_date,exchange,deal_type,action,quantity", ignoreDuplicates: true }
+      ).select("id");
+
+      if (data && data.length > 0) newDeals++;
+    }
 
     const latency = Date.now() - start;
     recordSourceResult("bse-rss", true, latency);
@@ -148,7 +146,7 @@ export async function scrapeBseAnnouncements(): Promise<number> {
     }
 
     const xml = await response.text();
-    return parseBseAnnouncementsXml(xml);
+    return await parseBseAnnouncementsXml(xml);
   } catch (error) {
     const latency = Date.now() - start;
     recordSourceResult("bse-announcements", false, latency, String(error));
@@ -157,14 +155,23 @@ export async function scrapeBseAnnouncements(): Promise<number> {
   }
 }
 
-function parseBseAnnouncementsXml(xml: string): number {
+async function parseBseAnnouncementsXml(xml: string): Promise<number> {
   const $ = cheerio.load(xml, { xmlMode: true });
   let relevantCount = 0;
 
+  const db = getDb();
+  const { data: stocks } = await db.from("stocks").select("name");
+
+  const items: Array<{ title: string; description: string }> = [];
   $("item").each((_, item) => {
-    const title = $(item).find("title").text().toLowerCase();
-    const description = $(item).find("description").text().toLowerCase();
-    const combined = `${title} ${description}`;
+    items.push({
+      title: $(item).find("title").text().toLowerCase(),
+      description: $(item).find("description").text().toLowerCase(),
+    });
+  });
+
+  for (const item of items) {
+    const combined = `${item.title} ${item.description}`;
 
     // Look for shareholding pattern filings
     if (
@@ -173,17 +180,14 @@ function parseBseAnnouncementsXml(xml: string): number {
       combined.includes("block deal")
     ) {
       // Check if it involves stocks in our portfolio
-      const db = getDb();
-      const stocks = db.prepare("SELECT name FROM stocks").all() as { name: string }[];
-
-      for (const stock of stocks) {
+      for (const stock of stocks || []) {
         if (combined.includes(stock.name.toLowerCase())) {
           relevantCount++;
           console.log(`[BSE RSS] Relevant announcement found for ${stock.name}`);
         }
       }
     }
-  });
+  }
 
   recordSourceResult("bse-announcements", true, 0);
   return relevantCount;

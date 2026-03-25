@@ -7,24 +7,35 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const unreadOnly = searchParams.get("unread") === "true";
 
-    const whereClause = unreadOnly ? "WHERE a.is_read = 0" : "";
+    let alertsQuery = db
+      .from("alerts")
+      .select("*, stocks(symbol, name)")
+      .order("created_at", { ascending: false })
+      .limit(50);
 
-    const alerts = db
-      .prepare(`
-        SELECT a.*, s.symbol, s.name as stock_name
-        FROM alerts a
-        JOIN stocks s ON a.stock_id = s.id
-        ${whereClause}
-        ORDER BY a.created_at DESC
-        LIMIT 50
-      `)
-      .all();
+    if (unreadOnly) {
+      alertsQuery = alertsQuery.eq("is_read", false);
+    }
 
-    const unreadCount = db
-      .prepare("SELECT COUNT(*) as count FROM alerts WHERE is_read = 0")
-      .get() as { count: number };
+    const { data: alertsData, error } = await alertsQuery;
+    if (error) throw error;
 
-    return NextResponse.json({ alerts, unreadCount: unreadCount.count });
+    const alerts = (alertsData || []).map((a: Record<string, unknown>) => {
+      const stock = a.stocks as unknown as Record<string, unknown> | null;
+      const { stocks: _stocks, ...rest } = a;
+      return {
+        ...rest,
+        symbol: stock?.symbol ?? null,
+        stock_name: stock?.name ?? null,
+      };
+    });
+
+    const { count: unreadCount } = await db
+      .from("alerts")
+      .select("*", { count: "exact", head: true })
+      .eq("is_read", false);
+
+    return NextResponse.json({ alerts, unreadCount: unreadCount || 0 });
   } catch (error) {
     console.error("[API] Alerts error:", error);
     return NextResponse.json({ error: "Failed to fetch alerts" }, { status: 500 });
@@ -37,9 +48,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     if (body.action === "mark_read" && body.alertId) {
-      db.prepare("UPDATE alerts SET is_read = 1 WHERE id = ?").run(body.alertId);
+      await db
+        .from("alerts")
+        .update({ is_read: true })
+        .eq("id", body.alertId);
     } else if (body.action === "mark_all_read") {
-      db.prepare("UPDATE alerts SET is_read = 1 WHERE is_read = 0").run();
+      await db
+        .from("alerts")
+        .update({ is_read: true })
+        .eq("is_read", false);
     }
 
     return NextResponse.json({ success: true });

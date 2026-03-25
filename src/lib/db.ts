@@ -1,28 +1,49 @@
-import Database from "better-sqlite3";
-import path from "path";
-import fs from "fs";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const DB_PATH = path.join(process.cwd(), "data", "portfolio.db");
+let supabase: SupabaseClient | null = null;
 
-let db: Database.Database | null = null;
+export function getDb(): SupabaseClient {
+  if (supabase) return supabase;
 
-export function getDb(): Database.Database {
-  if (db) return db;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Ensure data directory exists
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!url || !key) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars");
   }
 
-  db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  supabase = createClient(url, key);
+  return supabase;
+}
 
-  // Initialize schema
-  const schemaPath = path.join(process.cwd(), "src", "lib", "schema.sql");
-  const schema = fs.readFileSync(schemaPath, "utf-8");
-  db.exec(schema);
+// Helper to match the old ensureStock pattern used across all scrapers
+export async function ensureStock(symbol: string, name: string): Promise<number> {
+  const db = getDb();
 
-  return db;
+  const { data: existing } = await db
+    .from("stocks")
+    .select("id")
+    .eq("symbol", symbol)
+    .single();
+
+  if (existing) return existing.id;
+
+  const { data: inserted, error } = await db
+    .from("stocks")
+    .insert({ symbol, name })
+    .select("id")
+    .single();
+
+  if (error) {
+    // Might be a race condition — try fetching again
+    const { data: retry } = await db
+      .from("stocks")
+      .select("id")
+      .eq("symbol", symbol)
+      .single();
+    if (retry) return retry.id;
+    throw error;
+  }
+
+  return inserted!.id;
 }

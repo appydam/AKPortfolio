@@ -26,16 +26,16 @@ export async function scrapeScreenerFundamentals(symbol: string): Promise<boolea
         { headers: HEADERS }
       );
       if (!standaloneResponse.ok) return false;
-      return parseScreenerPage(await standaloneResponse.text(), symbol);
+      return await parseScreenerPage(await standaloneResponse.text(), symbol);
     }
-    return parseScreenerPage(await response.text(), symbol);
+    return await parseScreenerPage(await response.text(), symbol);
   } catch (error) {
     console.error(`[Screener] Failed to fetch ${symbol}:`, error);
     return false;
   }
 }
 
-function parseScreenerPage(html: string, symbol: string): boolean {
+async function parseScreenerPage(html: string, symbol: string): Promise<boolean> {
   const $ = cheerio.load(html);
   const db = getDb();
 
@@ -73,16 +73,17 @@ function parseScreenerPage(html: string, symbol: string): boolean {
   const hasData = Object.values(ratios).some((v) => v !== null);
   if (!hasData && !sector) return false;
 
-  db.prepare(`
-    UPDATE stocks SET
-      sector = COALESCE(?, sector),
-      market_cap = COALESCE(?, market_cap),
-      pe_ratio = COALESCE(?, pe_ratio),
-      roe = COALESCE(?, roe),
-      roce = COALESCE(?, roce),
-      updated_at = datetime('now')
-    WHERE symbol = ?
-  `).run(sector, ratios.market_cap, ratios.pe_ratio, ratios.roe, ratios.roce, symbol);
+  // Build update object with only non-null values
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (sector !== null) updateData.sector = sector;
+  if (ratios.market_cap !== null) updateData.market_cap = ratios.market_cap;
+  if (ratios.pe_ratio !== null) updateData.pe_ratio = ratios.pe_ratio;
+  if (ratios.roe !== null) updateData.roe = ratios.roe;
+  if (ratios.roce !== null) updateData.roce = ratios.roce;
+
+  await db.from("stocks").update(updateData).eq("symbol", symbol);
 
   return true;
 }
@@ -91,10 +92,10 @@ export async function updateAllFundamentals(): Promise<number> {
   console.log("[Screener] Updating fundamentals for all stocks...");
   const start = Date.now();
   const db = getDb();
-  const stocks = db.prepare("SELECT symbol FROM stocks").all() as { symbol: string }[];
+  const { data: stocks } = await db.from("stocks").select("symbol");
 
   let updated = 0;
-  for (const stock of stocks) {
+  for (const stock of stocks || []) {
     const success = await scrapeScreenerFundamentals(stock.symbol);
     if (success) updated++;
     await new Promise((r) => setTimeout(r, 1500));
@@ -102,6 +103,6 @@ export async function updateAllFundamentals(): Promise<number> {
 
   const latency = Date.now() - start;
   recordSourceResult("screener", updated > 0, latency, updated === 0 ? "No stocks updated" : undefined);
-  console.log(`[Screener] Updated fundamentals for ${updated}/${stocks.length} stocks`);
+  console.log(`[Screener] Updated fundamentals for ${updated}/${(stocks || []).length} stocks`);
   return updated;
 }

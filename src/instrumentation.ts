@@ -1,6 +1,5 @@
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { startScheduler } = await import("./lib/jobs/scheduler");
-    startScheduler();
-  }
+  // Scheduler jobs are now individual exported functions in src/lib/jobs/scheduler.ts
+  // They are meant to be invoked by Vercel Cron API routes instead of node-cron.
+  // No background scheduler to start.
 }

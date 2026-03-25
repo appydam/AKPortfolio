@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { getDb } from "../db";
+import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
 
 const TRENDLYNE_DEALS_URL =
@@ -30,20 +30,6 @@ function isKacholia(clientName: string): boolean {
   return KACHOLIA_NAMES.some((n) => lower.includes(n));
 }
 
-function ensureStock(symbol: string, name: string): number {
-  const db = getDb();
-  const existing = db
-    .prepare("SELECT id FROM stocks WHERE symbol = ?")
-    .get(symbol) as { id: number } | undefined;
-
-  if (existing) return existing.id;
-
-  const result = db
-    .prepare("INSERT INTO stocks (symbol, name) VALUES (?, ?)")
-    .run(symbol, name);
-  return result.lastInsertRowid as number;
-}
-
 export async function scrapeTrendlyneHoldings(): Promise<number> {
   console.log("[Trendlyne] Scraping holdings...");
   const start = Date.now();
@@ -55,7 +41,6 @@ export async function scrapeTrendlyneHoldings(): Promise<number> {
     }
 
     const html = await response.text();
-    const $ = cheerio.load(html);
     const db = getDb();
     let count = 0;
 
@@ -63,77 +48,73 @@ export async function scrapeTrendlyneHoldings(): Promise<number> {
     const q = Math.ceil((now.getMonth() + 1) / 3);
     const quarter = `${now.getFullYear()}-Q${q}`;
 
-    const upsertHolding = db.prepare(`
-      INSERT INTO holdings (stock_id, quarter, shares_held, pct_holding)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(stock_id, quarter) DO UPDATE SET
-        shares_held = excluded.shares_held,
-        pct_holding = excluded.pct_holding
-    `);
+    // Regex-based extraction — more robust than cheerio for this complex table
+    // Each stock row has an <a> link: /equity/share-holding/ID/SYMBOL/latest/slug/
+    // Followed by: <td data-order=VALUE> X.X Cr </td> (holding value)
+    //              <td> QTY </td> (comma-formatted shares)
+    //              <td data-order=PCT> PCT% </td> (holding %)
+    const stockLinkRegex = /<a[^>]*href="[^"]*?\/equity\/share-holding\/\d+\/([A-Z][A-Z0-9]+)\/latest\/[^"]*"[^>]*>([^<]+)<\/a>/g;
 
-    // Each stock row in the superstar-shareholding table has:
-    // td.stockName with <a href="/equity/share-holding/ID/SYMBOL/latest/...">Name</a>
-    // td[data-order=VALUE] = holding value in rupees
-    // td = quantity (text like "900,000")
-    // td[data-order] = change
-    // td[data-order=PCT] = latest quarter holding %
+    const seen = new Set<string>();
+    let match;
 
-    const rows = $("table.superstar-shareholding tbody tr");
+    while ((match = stockLinkRegex.exec(html)) !== null) {
+      const symbol = match[1];
+      if (seen.has(symbol) || /^\d+$/.test(symbol)) continue;
+      seen.add(symbol);
 
-    rows.each((_, row) => {
-      const $row = $(row);
+      const name = match[2].trim();
+      const pos = match.index + match[0].length;
 
-      // Extract symbol from the stock link
-      const stockLink = $row.find('a.stockrow[href*="/equity/share-holding/"]').first();
-      if (!stockLink.length) return;
+      // Look at the next ~2000 chars for row data
+      const rowAfter = html.substring(pos, pos + 2000);
 
-      const href = stockLink.attr("href") || "";
-      const symbolMatch = href.match(/\/equity\/share-holding\/\d+\/([A-Z0-9]+)\//);
-      if (!symbolMatch) return;
+      // Extract holding value in Cr from data-order attribute
+      const valMatch = rowAfter.match(/data-order\s*=\s*"?([\d.]+)"?\s*>\s*([\d.]+)\s*Cr/);
+      const holdingValueCr = valMatch ? parseFloat(valMatch[2]) : 0;
 
-      const symbol = symbolMatch[1];
-      if (/^\d+$/.test(symbol)) return; // Skip numeric IDs
+      // Extract quantity: <td...> comma-formatted number </td>
+      const qtyMatch = rowAfter.match(/<td[^>]*>\s*([\d,]+)\s*<\/td>/);
+      const sharesHeld = qtyMatch ? parseInt(qtyMatch[1].replace(/,/g, "")) : 0;
 
-      const stockName = cleanText(stockLink.text());
-      if (!stockName) return;
+      // Extract holding %: data-order=X.X> X.X%
+      const pctMatches = rowAfter.match(/data-order=([\d.]+)>\s*[\d.]+%/);
+      const holdingPct = pctMatches ? parseFloat(pctMatches[1]) : 0;
 
-      // Get all TDs in this row
-      const tds = $row.find("> td");
+      // Skip if no meaningful data
+      if (!sharesHeld && !holdingPct) continue;
 
-      // Find quantity: the TD after the holding value TD
-      // Holding value TD has data-order with a large number (value in rupees)
-      // Qty TD is the next one, containing comma-separated number like "900,000"
-      let sharesHeld = 0;
-      let holdingPct = 0;
+      const stockId = await ensureStock(symbol, name);
 
-      tds.each((i, td) => {
-        const $td = $(td);
-        const dataOrder = $td.attr("data-order");
-        const text = cleanText($td.text());
+      // If we have shares, use them directly
+      // If shares = 0 but we have value in Cr, store value as a marker
+      // (the price fetcher will handle the rest)
+      let finalShares = 0;
+      let finalPct = holdingPct;
 
-        // The quantity cell: contains a large comma-formatted number, no % sign, no "Cr"
-        if (!sharesHeld && !text.includes("Cr") && !text.includes("%") && i > 0) {
-          const num = parseNumber(text);
-          if (num >= 1000) {
-            sharesHeld = num;
-          }
-        }
+      if (sharesHeld > 0) {
+        finalShares = sharesHeld;
+      } else if (holdingValueCr > 0) {
+        // Store holding value in rupees as shares_held temporarily
+        // Will be corrected when we get prices
+        finalShares = holdingValueCr * 10000000;
+      } else if (holdingPct > 0) {
+        // Just has %, store with 1 share as placeholder
+        finalShares = 1;
+      }
 
-        // The holding % cell: has data-order with small number (< 100) and contains %
-        if (!holdingPct && dataOrder && text.includes("%")) {
-          const pct = parseFloat(dataOrder);
-          if (pct > 0 && pct < 100) {
-            holdingPct = pct;
-          }
-        }
-      });
+      await db.from("holdings").upsert(
+        {
+          stock_id: stockId,
+          quarter,
+          shares_held: finalShares,
+          pct_holding: finalPct,
+        },
+        { onConflict: "stock_id,quarter" }
+      );
 
-      if (!sharesHeld) return;
-
-      const stockId = ensureStock(symbol, stockName);
-      upsertHolding.run(stockId, quarter, sharesHeld, holdingPct);
       count++;
-    });
+    }
 
     const latency = Date.now() - start;
     recordSourceResult("trendlyne", true, latency);
@@ -152,11 +133,10 @@ export async function scrapeTrendlyneDeals(): Promise<number> {
   const start = Date.now();
 
   try {
-    // Build symbol map from holdings (already in DB from scrapeTrendlyneHoldings)
     const db = getDb();
     const stockMap = new Map<string, string>();
-    const stocks = db.prepare("SELECT name, symbol FROM stocks").all() as { name: string; symbol: string }[];
-    for (const s of stocks) {
+    const { data: stocks } = await db.from("stocks").select("name, symbol");
+    for (const s of stocks || []) {
       stockMap.set(s.name.toLowerCase(), s.symbol);
     }
 
@@ -169,18 +149,12 @@ export async function scrapeTrendlyneDeals(): Promise<number> {
     const $ = cheerio.load(html);
     let newDeals = 0;
 
-    const insertDeal = db.prepare(`
-      INSERT OR IGNORE INTO deals (stock_id, deal_date, exchange, deal_type, action, quantity, avg_price, pct_traded)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    // Deals table structure: each row has TDs for
-    // Stock Name | Client Name | Exchange | Deal Type | Action | Date | Price | Qty | % Traded
     const rows = $("table tbody tr");
 
-    rows.each((_, row) => {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
       const tds = $(row).find("td");
-      if (tds.length < 8) return;
+      if (tds.length < 8) continue;
 
       const rawStockName = cleanText($(tds[0]).text());
       const clientName = cleanText($(tds[1]).text());
@@ -192,11 +166,9 @@ export async function scrapeTrendlyneDeals(): Promise<number> {
       const quantity = parseNumber($(tds[7]).text());
       const pctTraded = tds.length > 8 ? parseNumber($(tds[8]).text()) : null;
 
-      // Only Kacholia's deals
-      if (!isKacholia(clientName)) return;
-      if (!quantity || !dealDate) return;
+      if (!isKacholia(clientName)) continue;
+      if (!quantity || !dealDate) continue;
 
-      // Clean stock name
       const stockName = rawStockName
         .replace(/\/\d+.*$/i, "")
         .replace(/\d+\s*week\s*(low|high)/gi, "")
@@ -206,17 +178,13 @@ export async function scrapeTrendlyneDeals(): Promise<number> {
         .replace(/\s+/g, " ")
         .trim();
 
-      // Get symbol from stock link
       const link = $(tds[0]).find("a").attr("href") || "";
       const linkMatch = link.match(/\/equity\/[^/]+\/\d+\/([A-Z][A-Z0-9]+)\//);
       let symbol = linkMatch?.[1];
 
-      // Fallback: match by name from our DB
       if (!symbol || /^\d+$/.test(symbol)) {
         const lower = stockName.toLowerCase();
         symbol = stockMap.get(lower);
-
-        // Partial match
         if (!symbol) {
           for (const [name, sym] of stockMap.entries()) {
             if (lower.includes(name) || name.includes(lower)) {
@@ -227,28 +195,31 @@ export async function scrapeTrendlyneDeals(): Promise<number> {
         }
       }
 
-      if (!symbol || /^\d+$/.test(symbol)) return;
+      if (!symbol || /^\d+$/.test(symbol)) continue;
 
       const normalizedAction =
         action.toLowerCase().includes("purchase") || action.toLowerCase().includes("buy")
           ? "Buy"
           : "Sell";
 
-      const stockId = ensureStock(symbol, stockName);
+      const stockId = await ensureStock(symbol, stockName);
 
-      const result = insertDeal.run(
-        stockId,
-        dealDate,
-        exchange,
-        dealType,
-        normalizedAction,
-        quantity,
-        avgPrice,
-        pctTraded
-      );
+      const { data } = await db.from("deals").upsert(
+        {
+          stock_id: stockId,
+          deal_date: dealDate,
+          exchange,
+          deal_type: dealType,
+          action: normalizedAction,
+          quantity,
+          avg_price: avgPrice,
+          pct_traded: pctTraded,
+        },
+        { onConflict: "stock_id,deal_date,exchange,deal_type,action,quantity", ignoreDuplicates: true }
+      ).select("id");
 
-      if (result.changes > 0) newDeals++;
-    });
+      if (data && data.length > 0) newDeals++;
+    }
 
     const latency = Date.now() - start;
     recordSourceResult("trendlyne", true, latency);

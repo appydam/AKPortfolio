@@ -32,13 +32,15 @@ export async function getAggregatedPrice(symbol: string): Promise<PriceData | nu
   const ttl = getCacheTtlMs();
 
   // Check cache first
-  const cached = db
-    .prepare("SELECT * FROM price_cache WHERE symbol = ?")
-    .get(symbol) as PriceData | undefined;
+  const { data: cached } = await db
+    .from("price_cache")
+    .select("*")
+    .eq("symbol", symbol)
+    .single();
 
   if (cached) {
     const age = Date.now() - new Date(cached.updated_at).getTime();
-    if (age < ttl) return cached;
+    if (age < ttl) return cached as PriceData;
   }
 
   // Try each source in priority order with failover
@@ -52,14 +54,17 @@ export async function getAggregatedPrice(symbol: string): Promise<PriceData | nu
         recordSourceResult(source.name, true, latency);
 
         // Update cache
-        db.prepare(`
-          INSERT INTO price_cache (symbol, price, change_pct, updated_at)
-          VALUES (?, ?, ?, ?)
-          ON CONFLICT(symbol) DO UPDATE SET
-            price = excluded.price,
-            change_pct = excluded.change_pct,
-            updated_at = excluded.updated_at
-        `).run(price.symbol, price.price, price.change_pct, price.updated_at);
+        await db
+          .from("price_cache")
+          .upsert(
+            {
+              symbol: price.symbol,
+              price: price.price,
+              change_pct: price.change_pct,
+              updated_at: price.updated_at,
+            },
+            { onConflict: "symbol" }
+          );
 
         return price;
       }
@@ -75,7 +80,7 @@ export async function getAggregatedPrice(symbol: string): Promise<PriceData | nu
   // All sources failed — return stale cache if available
   if (cached) {
     console.warn(`[Aggregator] All sources failed for ${symbol}, using stale cache`);
-    return cached;
+    return cached as PriceData;
   }
 
   return null;
@@ -100,11 +105,20 @@ export async function getAggregatedPrices(symbols: string[]): Promise<Record<str
 
 export async function refreshAllAggregatedPrices(): Promise<number> {
   const db = getDb();
-  const stocks = db
-    .prepare("SELECT DISTINCT s.symbol FROM stocks s INNER JOIN holdings h ON s.id = h.stock_id")
-    .all() as { symbol: string }[];
 
-  const symbols = stocks.map((s) => s.symbol);
+  // Get distinct symbols from stocks that have holdings
+  const { data: holdingsWithStocks } = await db
+    .from("holdings")
+    .select("stock_id, stocks(symbol)")
+    .limit(1000);
+
+  const symbolSet = new Set<string>();
+  for (const h of holdingsWithStocks || []) {
+    const stock = h.stocks as unknown as Record<string, unknown> | null;
+    if (stock?.symbol) symbolSet.add(stock.symbol as string);
+  }
+
+  const symbols = Array.from(symbolSet);
   const prices = await getAggregatedPrices(symbols);
   return Object.keys(prices).length;
 }

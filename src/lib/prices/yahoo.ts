@@ -61,28 +61,33 @@ export async function getPrice(symbol: string): Promise<PriceData | null> {
   const ttl = getCacheTtlMs();
 
   // Check cache
-  const cached = db
-    .prepare("SELECT * FROM price_cache WHERE symbol = ?")
-    .get(symbol) as PriceData | undefined;
+  const { data: cached } = await db
+    .from("price_cache")
+    .select("*")
+    .eq("symbol", symbol)
+    .single();
 
   if (cached) {
     const age = Date.now() - new Date(cached.updated_at).getTime();
-    if (age < ttl) return cached;
+    if (age < ttl) return cached as PriceData;
   }
 
   // Fetch fresh
   const fresh = await fetchYahooPrice(symbol);
-  if (!fresh) return cached || null;
+  if (!fresh) return (cached as PriceData) || null;
 
   // Update cache
-  db.prepare(`
-    INSERT INTO price_cache (symbol, price, change_pct, updated_at)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(symbol) DO UPDATE SET
-      price = excluded.price,
-      change_pct = excluded.change_pct,
-      updated_at = excluded.updated_at
-  `).run(fresh.symbol, fresh.price, fresh.change_pct, fresh.updated_at);
+  await db
+    .from("price_cache")
+    .upsert(
+      {
+        symbol: fresh.symbol,
+        price: fresh.price,
+        change_pct: fresh.change_pct,
+        updated_at: fresh.updated_at,
+      },
+      { onConflict: "symbol" }
+    );
 
   return fresh;
 }
@@ -111,11 +116,20 @@ export async function getPrices(symbols: string[]): Promise<Record<string, Price
 
 export async function refreshAllPrices(): Promise<number> {
   const db = getDb();
-  const stocks = db
-    .prepare("SELECT DISTINCT s.symbol FROM stocks s INNER JOIN holdings h ON s.id = h.stock_id")
-    .all() as { symbol: string }[];
 
-  const symbols = stocks.map((s) => s.symbol);
+  // Get distinct symbols from stocks that have holdings
+  const { data: holdingsWithStocks } = await db
+    .from("holdings")
+    .select("stock_id, stocks(symbol)")
+    .limit(1000);
+
+  const symbolSet = new Set<string>();
+  for (const h of holdingsWithStocks || []) {
+    const stock = h.stocks as unknown as Record<string, unknown> | null;
+    if (stock?.symbol) symbolSet.add(stock.symbol as string);
+  }
+
+  const symbols = Array.from(symbolSet);
   const prices = await getPrices(symbols);
   return Object.keys(prices).length;
 }

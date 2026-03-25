@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3"],
+  // No serverExternalPackages needed — using Supabase instead of better-sqlite3
 };
 
 export default nextConfig;

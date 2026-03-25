@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { getDb } from "../db";
+import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
 
 // MoneyControl superstar investor tracking
@@ -35,20 +35,6 @@ function isAshishKacholia(name: string): boolean {
   return ASHISH_KACHOLIA_VARIANTS.some((v) => lower.includes(v));
 }
 
-function ensureStock(symbol: string, name: string): number {
-  const db = getDb();
-  const existing = db
-    .prepare("SELECT id FROM stocks WHERE symbol = ? OR name = ?")
-    .get(symbol, name) as { id: number } | undefined;
-
-  if (existing) return existing.id;
-
-  const result = db
-    .prepare("INSERT INTO stocks (symbol, name) VALUES (?, ?)")
-    .run(symbol, name);
-  return result.lastInsertRowid as number;
-}
-
 export async function scrapeMoneyControlBulkDeals(): Promise<number> {
   console.log("[MoneyControl] Scraping bulk deals...");
   const start = Date.now();
@@ -70,10 +56,15 @@ export async function scrapeMoneyControlBulkDeals(): Promise<number> {
       const $ = cheerio.load(html);
       const db = getDb();
 
-      const insertDeal = db.prepare(`
-        INSERT OR IGNORE INTO deals (stock_id, deal_date, exchange, deal_type, action, quantity, avg_price, pct_traded)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+      // Collect rows from HTML first (synchronous cheerio parsing)
+      const parsedRows: Array<{
+        dealDate: string;
+        stockName: string;
+        symbol: string;
+        action: string;
+        quantity: number;
+        avgPrice: number;
+      }> = [];
 
       // MoneyControl bulk deals table
       $("table.tbldata tbody tr, table.mctable1 tbody tr, #bulkDeals table tr").each(
@@ -106,22 +97,30 @@ export async function scrapeMoneyControlBulkDeals(): Promise<number> {
             symbolMatch?.[1] ||
             stockName.replace(/[^A-Za-z0-9]/g, "").toUpperCase().substring(0, 20);
 
-          const stockId = ensureStock(symbol, stockName);
-
-          const result = insertDeal.run(
-            stockId,
-            dealDate,
-            exchange,
-            "Bulk",
-            action,
-            quantity,
-            avgPrice,
-            null
-          );
-
-          if (result.changes > 0) totalNew++;
+          parsedRows.push({ dealDate, stockName, symbol, action, quantity, avgPrice });
         }
       );
+
+      // Now process rows with async DB calls
+      for (const r of parsedRows) {
+        const stockId = await ensureStock(r.symbol, r.stockName);
+
+        const { data } = await db.from("deals").upsert(
+          {
+            stock_id: stockId,
+            deal_date: r.dealDate,
+            exchange,
+            deal_type: "Bulk",
+            action: r.action,
+            quantity: r.quantity,
+            avg_price: r.avgPrice,
+            pct_traded: null,
+          },
+          { onConflict: "stock_id,deal_date,exchange,deal_type,action,quantity", ignoreDuplicates: true }
+        ).select("id");
+
+        if (data && data.length > 0) totalNew++;
+      }
 
       // Delay between exchanges
       await new Promise((r) => setTimeout(r, 1500));
