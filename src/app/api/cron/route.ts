@@ -5,6 +5,10 @@ import {
   jobScrapeNseDeals,
   jobScrapeBseDeals,
   jobScrapeMoneyControl,
+  jobScrapeTickertape,
+  jobScrapeSebiShp,
+  jobCheckTodayDeals,
+  jobRunDiff,
   jobUpdateFundamentals,
   jobTakePortfolioSnapshot,
 } from "@/lib/jobs/scheduler";
@@ -12,13 +16,12 @@ import {
 const CRON_SECRET = process.env.CRON_SECRET;
 
 function verifyCron(request: NextRequest): boolean {
-  // Vercel Cron sends this header automatically
   const authHeader = request.headers.get("authorization");
   if (authHeader === `Bearer ${CRON_SECRET}`) return true;
-
-  // Also allow if no secret is set (development)
   if (!CRON_SECRET) return true;
-
+  // Vercel Cron sends the secret as a query param too
+  const { searchParams } = new URL(request.url);
+  if (searchParams.get("secret") === CRON_SECRET) return true;
   return false;
 }
 
@@ -39,6 +42,8 @@ export async function GET(request: NextRequest) {
         break;
       case "trendlyne":
         result = await jobScrapeTrendlyne();
+        // After trendlyne scrape, run diff to detect changes
+        await jobRunDiff().catch(() => null);
         break;
       case "nse":
         result = await jobScrapeNseDeals();
@@ -49,31 +54,61 @@ export async function GET(request: NextRequest) {
       case "moneycontrol":
         result = await jobScrapeMoneyControl();
         break;
+      case "tickertape":
+        result = await jobScrapeTickertape();
+        await jobRunDiff().catch(() => null);
+        break;
+      case "sebi-shp":
+        result = await jobScrapeSebiShp();
+        await jobRunDiff().catch(() => null);
+        break;
+      case "today-deals":
+        result = await jobCheckTodayDeals();
+        break;
+      case "diff":
+        result = await jobRunDiff();
+        break;
       case "fundamentals":
         result = await jobUpdateFundamentals();
         break;
       case "snapshot":
         result = await jobTakePortfolioSnapshot();
         break;
-      case "all-deals":
-        // Run all deal scrapers sequentially
-        const trendlyne = await jobScrapeTrendlyne();
+      case "all-deals": {
+        // Run all deal scrapers in parallel where safe, sequential for rate limits
+        const [trendlyne, tickertape] = await Promise.allSettled([
+          jobScrapeTrendlyne(),
+          jobScrapeTickertape(),
+        ]);
         await new Promise((r) => setTimeout(r, 2000));
-        const nse = await jobScrapeNseDeals();
+        const [nse, bse] = await Promise.allSettled([
+          jobScrapeNseDeals(),
+          jobScrapeBseDeals(),
+        ]);
         await new Promise((r) => setTimeout(r, 2000));
-        const bse = await jobScrapeBseDeals();
-        await new Promise((r) => setTimeout(r, 2000));
-        const mc = await jobScrapeMoneyControl();
-        result = { trendlyne, nse, bse, mc };
+        const [mc, sebi] = await Promise.allSettled([
+          jobScrapeMoneyControl(),
+          jobScrapeSebiShp(),
+        ]);
+        await jobRunDiff().catch(() => null);
+        result = { trendlyne, tickertape, nse, bse, mc, sebi };
         break;
+      }
       default:
         return NextResponse.json(
-          { error: `Unknown job: ${job}. Valid: prices, trendlyne, nse, bse, moneycontrol, fundamentals, snapshot, all-deals` },
+          {
+            error: `Unknown job: ${job}`,
+            valid: [
+              "prices", "trendlyne", "nse", "bse", "moneycontrol",
+              "tickertape", "sebi-shp", "today-deals", "diff",
+              "fundamentals", "snapshot", "all-deals"
+            ]
+          },
           { status: 400 }
         );
     }
 
-    return NextResponse.json({ success: true, job, result });
+    return NextResponse.json({ success: true, job, result, ts: new Date().toISOString() });
   } catch (error) {
     console.error(`[Cron] Job '${job}' failed:`, error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
