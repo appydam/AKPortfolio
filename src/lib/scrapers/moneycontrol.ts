@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
+import { isKacholiaEntity } from "../entities";
 
 // MoneyControl superstar investor tracking
 const MC_PORTFOLIO_URL =
@@ -15,12 +16,6 @@ const HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-const ASHISH_KACHOLIA_VARIANTS = [
-  "ashish kacholia",
-  "ashish rameshchandra kacholia",
-  "kacholia ashish",
-];
-
 function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -28,11 +23,6 @@ function cleanText(text: string): string {
 function parseNumber(text: string): number {
   const cleaned = text.replace(/,/g, "").replace(/[^\d.\-]/g, "");
   return parseFloat(cleaned) || 0;
-}
-
-function isAshishKacholia(name: string): boolean {
-  const lower = name.toLowerCase();
-  return ASHISH_KACHOLIA_VARIANTS.some((v) => lower.includes(v));
 }
 
 export async function scrapeMoneyControlBulkDeals(): Promise<number> {
@@ -82,7 +72,7 @@ export async function scrapeMoneyControlBulkDeals(): Promise<number> {
           const avgPrice = parseNumber($(cells[5]).text());
 
           // Filter for Ashish Kacholia
-          if (!isAshishKacholia(clientName)) return;
+          if (!isKacholiaEntity(clientName)) return;
 
           const action =
             dealTypeRaw.toLowerCase().includes("buy") ||

@@ -1,21 +1,10 @@
 import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
+import { isKacholiaEntity } from "../entities";
 
 // NSE publishes daily bulk deal CSV/archives
 const NSE_BULK_DEALS_URL = "https://www.nseindia.com/api/historical/bulk-deals";
 const NSE_HOME = "https://www.nseindia.com";
-
-const ASHISH_KACHOLIA_VARIANTS = [
-  "ashish kacholia",
-  "ashish rameshchandra kacholia",
-  "a kacholia",
-  "ashish r kacholia",
-];
-
-function isAshishKacholia(clientName: string): boolean {
-  const lower = clientName.toLowerCase();
-  return ASHISH_KACHOLIA_VARIANTS.some((v) => lower.includes(v));
-}
 
 // NSE requires session cookies just like for quotes
 let nseCookies: string | null = null;
@@ -99,7 +88,7 @@ export async function scrapeNseBulkDeals(daysBack: number = 7): Promise<number> 
     let newDeals = 0;
 
     for (const deal of deals) {
-      if (!isAshishKacholia(deal.BD_CLIENT_NAME || "")) continue;
+      if (!isKacholiaEntity(deal.BD_CLIENT_NAME || "")) continue;
 
       const symbol = deal.BD_SYMBOL;
       const name = deal.BD_SCRIP_NAME || symbol;
@@ -173,7 +162,7 @@ export async function scrapeNseBlockDeals(daysBack: number = 7): Promise<number>
     let newDeals = 0;
 
     for (const deal of deals) {
-      if (!isAshishKacholia(deal.BD_CLIENT_NAME || "")) continue;
+      if (!isKacholiaEntity(deal.BD_CLIENT_NAME || "")) continue;
 
       const symbol = deal.BD_SYMBOL;
       const name = deal.BD_SCRIP_NAME || symbol;

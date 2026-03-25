@@ -25,6 +25,7 @@ import { MFBreakdown } from "@/components/my-portfolio/mf-breakdown";
 import { RecoveryAnalysis } from "@/components/my-portfolio/recovery-analysis";
 import { DayChangeScatter } from "@/components/my-portfolio/day-change-scatter";
 import { InsightsPanel } from "@/components/my-portfolio/insights-panel";
+import { AIAnalysis } from "@/components/my-portfolio/ai-analysis";
 
 function fmt(value: number): string {
   const abs = Math.abs(value);
@@ -135,6 +136,9 @@ export default function MyPortfolioPage() {
           </Card>
         ))}
       </div>
+
+      {/* ── AI Analysis ── */}
+      <AIAnalysis portfolioData={data} />
 
       {/* ── Row 1: Health Score + Insights ── */}
       {(analytics.healthScore || analytics.insights?.length > 0) && (

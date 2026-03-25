@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
+import { isKacholiaEntity } from "../entities";
 
 const TRENDLYNE_DEALS_URL =
   "https://trendlyne.com/portfolio/bulk-block-deals/53746/ashish-kacholia-portfolio/";
@@ -14,8 +15,6 @@ const HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-const KACHOLIA_NAMES = ["kacholia ashish", "ashish kacholia", "ashish ramesh kacholia", "ashish rameshchandra kacholia"];
-
 function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -23,11 +22,6 @@ function cleanText(text: string): string {
 function parseNumber(text: string): number {
   const cleaned = text.replace(/,/g, "").replace(/[^\d.\-]/g, "");
   return parseFloat(cleaned) || 0;
-}
-
-function isKacholia(clientName: string): boolean {
-  const lower = clientName.toLowerCase();
-  return KACHOLIA_NAMES.some((n) => lower.includes(n));
 }
 
 export async function scrapeTrendlyneHoldings(): Promise<number> {
@@ -166,7 +160,7 @@ export async function scrapeTrendlyneDeals(): Promise<number> {
       const quantity = parseNumber($(tds[7]).text());
       const pctTraded = tds.length > 8 ? parseNumber($(tds[8]).text()) : null;
 
-      if (!isKacholia(clientName)) continue;
+      if (!isKacholiaEntity(clientName)) continue;
       if (!quantity || !dealDate) continue;
 
       const stockName = rawStockName

@@ -1,5 +1,6 @@
 import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
+import { isKacholiaEntity } from "../entities";
 
 // BSE publishes daily bulk + block deal CSVs — much more reliable than HTML scraping
 // These are official exchange files, available from ~6 PM on trading days
@@ -12,20 +13,6 @@ const HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
   Referer: "https://www.bseindia.com/",
 };
-
-const KACHOLIA_VARIANTS = [
-  "ashish kacholia",
-  "ashish rameshchandra kacholia",
-  "kacholia ashish",
-  "a kacholia",
-  "ashish r kacholia",
-  "a.kacholia",
-];
-
-function isKacholia(name: string): boolean {
-  const lower = name.toLowerCase().trim();
-  return KACHOLIA_VARIANTS.some((v) => lower.includes(v));
-}
 
 function parseNumber(text: string): number {
   return parseFloat(text.replace(/,/g, "").replace(/[^\d.\-]/g, "")) || 0;
@@ -81,7 +68,7 @@ export async function scrapeBseBulkDealsCsv(daysBack = 7): Promise<number> {
       for (const deal of deals) {
         // BSE API field names vary — try all known variants
         const clientName = (deal.CLIENT_NAME || deal.ClientName || deal.client_name || "").trim();
-        if (!isKacholia(clientName)) continue;
+        if (!isKacholiaEntity(clientName)) continue;
 
         const symbol = (deal.SC_CODE || deal.SCRIP_CD || deal.symbol || "").trim();
         const name = (deal.SC_NAME || deal.SCRIP_NAME || deal.company || symbol).trim();
@@ -168,7 +155,7 @@ export async function scrapeBseBlockDealsCsv(daysBack = 7): Promise<number> {
 
       for (const deal of deals) {
         const clientName = (deal.CLIENT_NAME || deal.ClientName || deal.client_name || "").trim();
-        if (!isKacholia(clientName)) continue;
+        if (!isKacholiaEntity(clientName)) continue;
 
         const symbol = (deal.SC_CODE || deal.SCRIP_CD || deal.symbol || "").trim();
         const name = (deal.SC_NAME || deal.SCRIP_NAME || deal.company || symbol).trim();

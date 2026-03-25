@@ -1,6 +1,7 @@
 import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
 import { notifyNewDeal } from "../notifications/telegram";
+import { isKacholiaEntity } from "../entities";
 
 // Fast-path checker for TODAY's bulk/block deals
 // NSE and BSE both publish EOD files ~5:30-6:30 PM IST
@@ -14,19 +15,6 @@ const HEADERS = {
   Accept: "application/json",
   "Accept-Language": "en-US,en;q=0.9",
 };
-
-const KACHOLIA_VARIANTS = [
-  "ashish kacholia",
-  "ashish rameshchandra kacholia",
-  "kacholia ashish",
-  "a kacholia",
-  "ashish r kacholia",
-];
-
-function isKacholia(name: string): boolean {
-  const lower = name.toLowerCase().trim();
-  return KACHOLIA_VARIANTS.some((v) => lower.includes(v));
-}
 
 function parseNumber(text: string): number {
   return parseFloat(String(text).replace(/,/g, "").replace(/[^\d.\-]/g, "")) || 0;
@@ -82,7 +70,7 @@ async function fetchNseTodayBulkDeals(): Promise<Array<{
     const data = await res.json();
     const deals = data?.data || [];
     for (const d of deals) {
-      if (!isKacholia(d.BD_CLIENT_NAME || "")) continue;
+      if (!isKacholiaEntity(d.BD_CLIENT_NAME || "")) continue;
       results.push({
         symbol: d.BD_SYMBOL || "",
         name: d.BD_SCRIP_NAME || d.BD_SYMBOL || "",
@@ -105,7 +93,7 @@ async function fetchNseTodayBulkDeals(): Promise<Array<{
     const data = await blockRes.json();
     const deals = data?.data || [];
     for (const d of deals) {
-      if (!isKacholia(d.BD_CLIENT_NAME || "")) continue;
+      if (!isKacholiaEntity(d.BD_CLIENT_NAME || "")) continue;
       results.push({
         symbol: d.BD_SYMBOL || "",
         name: d.BD_SCRIP_NAME || d.BD_SYMBOL || "",
@@ -148,7 +136,7 @@ async function fetchBseTodayBulkDeals(): Promise<Array<{
     const deals = data?.Table || data?.data || [];
     for (const d of deals) {
       const clientName = (d.CLIENT_NAME || d.ClientName || "").trim();
-      if (!isKacholia(clientName)) continue;
+      if (!isKacholiaEntity(clientName)) continue;
       results.push({
         symbol: d.SC_CODE || d.SCRIP_CD || "",
         name: d.SC_NAME || d.SCRIP_NAME || "",

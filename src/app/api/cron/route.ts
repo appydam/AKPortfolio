@@ -10,6 +10,9 @@ import {
   jobRunDiff,
   jobUpdateFundamentals,
   jobTakePortfolioSnapshot,
+  jobVolumeAnomalies,
+  jobCorporateActions,
+  jobDailyEstimate,
 } from "@/lib/jobs/scheduler";
 import { computeInsights } from "@/lib/analytics/insights";
 import { getDb } from "@/lib/db";
@@ -69,6 +72,15 @@ export async function GET(request: NextRequest) {
       case "snapshot":
         result = await jobTakePortfolioSnapshot();
         break;
+      case "volume-scan":
+        result = await jobVolumeAnomalies();
+        break;
+      case "corp-actions":
+        result = await jobCorporateActions();
+        break;
+      case "daily-estimate":
+        result = await jobDailyEstimate();
+        break;
       case "insights": {
         const insights = await computeInsights();
         const db = getDb();
@@ -102,7 +114,8 @@ export async function GET(request: NextRequest) {
             valid: [
               "prices", "trendlyne", "nse", "bse", "moneycontrol",
               "sebi-shp", "today-deals", "diff",
-              "fundamentals", "snapshot", "insights", "all-deals"
+              "fundamentals", "snapshot", "insights",
+              "volume-scan", "corp-actions", "daily-estimate", "all-deals"
             ]
           },
           { status: 400 }

@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
+import { isKacholiaEntity } from "../entities";
 
 // SEBI SCORES + BSE/NSE filings — Shareholding Pattern (SHP) XML/HTML
 // Companies must file SHP within 21 days of quarter end
@@ -23,20 +24,6 @@ const HEADERS = {
 
 function parseNumber(text: string): number {
   return parseFloat(String(text).replace(/,/g, "").replace(/[^\d.\-]/g, "")) || 0;
-}
-
-// Known Kacholia name variants in SHP filings
-const KACHOLIA_VARIANTS = [
-  "ashish kacholia",
-  "ashish rameshchandra kacholia",
-  "kacholia ashish rameshchandra",
-  "ashish r kacholia",
-  "a kacholia",
-];
-
-function isKacholia(name: string): boolean {
-  const lower = name.toLowerCase().trim();
-  return KACHOLIA_VARIANTS.some((v) => lower.includes(v));
 }
 
 // Get current quarter string e.g. "31-12-2024" for Q3FY25
@@ -70,7 +57,7 @@ export async function fetchNseShp(symbol: string): Promise<{ kacholiaShares: num
 
     for (const holder of shpData) {
       const name = (holder.name || holder.holderName || "").trim();
-      if (!isKacholia(name)) continue;
+      if (!isKacholiaEntity(name)) continue;
       kacholiaShares += parseNumber(String(holder.shares || holder.noOfShares || 0));
       kacholiaPct += parseNumber(String(holder.pct || holder.percentage || 0));
     }
@@ -106,7 +93,7 @@ export async function fetchBseShp(scripCode: string, symbol: string): Promise<{ 
 
     for (const holder of holders) {
       const name = (holder.CATEGORY || holder.Name || holder.name || "").trim();
-      if (!isKacholia(name)) continue;
+      if (!isKacholiaEntity(name)) continue;
       kacholiaShares += parseNumber(String(holder.SHARES || holder.NoOfShares || 0));
       kacholiaPct += parseNumber(String(holder.PCT || holder.Percentage || 0));
     }

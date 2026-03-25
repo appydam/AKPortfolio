@@ -126,6 +126,12 @@ CREATE TABLE IF NOT EXISTS index_data (
   UNIQUE(index_name, date)
 );
 
+CREATE TABLE IF NOT EXISTS insights_cache (
+  id            INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  payload       TEXT NOT NULL,
+  computed_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Enable Row Level Security (optional but recommended)
 -- ALTER TABLE stocks ENABLE ROW LEVEL SECURITY;
 -- CREATE POLICY "Allow all" ON stocks FOR ALL USING (true);

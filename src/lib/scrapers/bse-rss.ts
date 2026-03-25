@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
+import { isKacholiaEntity } from "../entities";
 
 // BSE Corporate filings — bulk deal reports
 const BSE_BULK_DEALS_URL =
@@ -15,13 +16,6 @@ const HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-const ASHISH_KACHOLIA_VARIANTS = [
-  "ashish kacholia",
-  "ashish rameshchandra kacholia",
-  "a kacholia",
-  "ashish r kacholia",
-];
-
 function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -29,11 +23,6 @@ function cleanText(text: string): string {
 function parseNumber(text: string): number {
   const cleaned = text.replace(/,/g, "").replace(/[^\d.\-]/g, "");
   return parseFloat(cleaned) || 0;
-}
-
-function isAshishKacholia(clientName: string): boolean {
-  const lower = clientName.toLowerCase();
-  return ASHISH_KACHOLIA_VARIANTS.some((v) => lower.includes(v));
 }
 
 export async function scrapeBseBulkDeals(): Promise<number> {
@@ -78,7 +67,7 @@ export async function scrapeBseBulkDeals(): Promise<number> {
         const avgPrice = cells.length > 6 ? parseNumber($(cells[6]).text()) : 0;
 
         // Filter for Ashish Kacholia
-        if (!isAshishKacholia(clientName)) return;
+        if (!isKacholiaEntity(clientName)) return;
 
         rows.push({ dealDate, stockCode, stockName, clientName, dealTypeRaw, quantity, avgPrice });
       }

@@ -7,6 +7,9 @@ import { scrapeBseBulkDealsCsv, scrapeBseBlockDealsCsv } from "../scrapers/bse-c
 import { scrapeSebiShp, scanBseFilingsRss } from "../scrapers/sebi-shp";
 import { checkTodayDeals } from "../scrapers/today-deals";
 import { runDiffAndAlert } from "../analytics/deal-diff";
+import { detectVolumeAnomalies } from "../analytics/volume-anomaly";
+import { scanCorporateActions } from "../analytics/corporate-actions";
+import { getDailyEstimate } from "../analytics/daily-estimator";
 import { refreshAllAggregatedPrices } from "../prices/aggregator";
 import { shouldSkipSource } from "../health/monitor";
 import { getDb } from "../db";
@@ -208,4 +211,42 @@ export async function jobTakePortfolioSnapshot(): Promise<{
 
   console.log(`[Jobs] Snapshot: ${holdingsData.length} holdings, ₹${(totalValue / 1e7).toFixed(2)} Cr`);
   return { holdings: holdingsData.length, totalValue };
+}
+
+// NEW: Volume anomaly detection — runs daily after market close
+export async function jobVolumeAnomalies(): Promise<{ anomalies: number }> {
+  console.log("[Jobs] Scanning for volume anomalies...");
+  const anomalies = await detectVolumeAnomalies(3);
+  console.log(`[Jobs] Found ${anomalies.length} volume anomalies`);
+  return { anomalies: anomalies.length };
+}
+
+// NEW: Corporate action scanner — runs daily
+export async function jobCorporateActions(): Promise<{ actions: number }> {
+  console.log("[Jobs] Scanning for corporate actions...");
+  const actions = await scanCorporateActions();
+  console.log(`[Jobs] Found ${actions.length} corporate actions`);
+  return { actions: actions.length };
+}
+
+// NEW: Daily portfolio estimate — runs at market close
+export async function jobDailyEstimate(): Promise<{ value: number; holdings: number }> {
+  console.log("[Jobs] Computing daily portfolio estimate...");
+  const estimate = await getDailyEstimate();
+  console.log(`[Jobs] Estimated: ₹${(estimate.estimatedValue / 1e7).toFixed(2)} Cr, ${estimate.numHoldings} holdings`);
+
+  // Also save as a snapshot
+  const db = getDb();
+  const today = new Date().toISOString().split("T")[0];
+  await db.from("portfolio_snapshots").upsert(
+    {
+      snapshot_date: today,
+      total_value: estimate.estimatedValue,
+      num_holdings: estimate.numHoldings,
+      details_json: JSON.stringify(estimate.topMovers),
+    },
+    { onConflict: "snapshot_date" }
+  );
+
+  return { value: estimate.estimatedValue, holdings: estimate.numHoldings };
 }
