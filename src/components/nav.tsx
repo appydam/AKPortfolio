@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FileText, Brain, Activity, PieChart, Clock, Wallet } from "lucide-react";
+import { BarChart3, FileText, Brain, Activity, PieChart, Clock, Wallet, Radar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertsBell } from "./dashboard/alerts-panel";
 
@@ -13,6 +13,7 @@ const links = [
   { href: "/analytics", label: "Analytics", icon: PieChart },
   { href: "/timeline", label: "Timeline", icon: Clock },
   { href: "/health", label: "Health", icon: Activity },
+  { href: "/sources", label: "Sources", icon: Radar },
   { href: "/my-portfolio", label: "My Portfolio", icon: Wallet },
 ];
 
