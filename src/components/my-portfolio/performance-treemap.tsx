@@ -92,7 +92,7 @@ export function PerformanceTreemap({ data }: PerformanceTreemapProps) {
             </div>
           ))}
         </div>
-        <ResponsiveContainer width="100%" height={380}>
+        <ResponsiveContainer width="100%" height={280}>
           <Treemap
             data={data}
             dataKey="size"

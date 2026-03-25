@@ -11,6 +11,8 @@ import {
   jobUpdateFundamentals,
   jobTakePortfolioSnapshot,
 } from "@/lib/jobs/scheduler";
+import { computeInsights } from "@/lib/analytics/insights";
+import { getDb } from "@/lib/db";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
@@ -67,6 +69,16 @@ export async function GET(request: NextRequest) {
       case "snapshot":
         result = await jobTakePortfolioSnapshot();
         break;
+      case "insights": {
+        const insights = await computeInsights();
+        const db = getDb();
+        await db.from("insights_cache").upsert(
+          { id: 1, payload: JSON.stringify(insights), computed_at: new Date().toISOString() },
+          { onConflict: "id" }
+        );
+        result = { computedAt: insights.computedAt, stocks: insights.conviction.length };
+        break;
+      }
       case "all-deals": {
         const [trendlyne] = await Promise.allSettled([jobScrapeTrendlyne()]);
         await new Promise((r) => setTimeout(r, 2000));
@@ -90,7 +102,7 @@ export async function GET(request: NextRequest) {
             valid: [
               "prices", "trendlyne", "nse", "bse", "moneycontrol",
               "sebi-shp", "today-deals", "diff",
-              "fundamentals", "snapshot", "all-deals"
+              "fundamentals", "snapshot", "insights", "all-deals"
             ]
           },
           { status: 400 }

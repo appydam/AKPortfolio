@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FileText, LayoutDashboard, Activity, PieChart, Clock, Wallet } from "lucide-react";
+import { BarChart3, FileText, Brain, Activity, PieChart, Clock, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertsBell } from "./dashboard/alerts-panel";
 
 const links = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/", label: "Insights", icon: Brain },
   { href: "/holdings", label: "Holdings", icon: BarChart3 },
   { href: "/deals", label: "Deals", icon: FileText },
   { href: "/analytics", label: "Analytics", icon: PieChart },

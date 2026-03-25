@@ -31,7 +31,7 @@ export function VsAKRadar({ data }: { data: RadarEntry[] }) {
           </p>
         ) : (
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={240}>
               <RadarChart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
                 <PolarGrid />
                 <PolarAngleAxis dataKey="metric" tick={{ fontSize: 11 }} />

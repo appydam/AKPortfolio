@@ -56,14 +56,14 @@ export function StockAllocationChart({ stockAllocation, assetAllocation }: Props
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={230}>
             <PieChart>
               <Pie
                 data={pieData}
                 cx="50%"
                 cy="50%"
-                innerRadius={65}
-                outerRadius={105}
+                innerRadius={55}
+                outerRadius={88}
                 dataKey="value"
                 paddingAngle={2}
               >
@@ -98,14 +98,14 @@ export function StockAllocationChart({ stockAllocation, assetAllocation }: Props
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={230}>
             <PieChart>
               <Pie
                 data={assetAllocation.map((a) => ({ name: a.category, value: a.currentValue, pnlPct: a.pnlPct, weight: a.weightPct }))}
                 cx="50%"
                 cy="50%"
-                innerRadius={65}
-                outerRadius={105}
+                innerRadius={55}
+                outerRadius={88}
                 dataKey="value"
                 paddingAngle={2}
               >

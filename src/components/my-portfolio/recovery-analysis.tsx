@@ -58,7 +58,7 @@ export function RecoveryAnalysis({ data }: { data: RecoveryEntry[] }) {
           ))}
         </div>
 
-        <ResponsiveContainer width="100%" height={Math.max(200, data.slice(0, 15).length * 28)}>
+        <ResponsiveContainer width="100%" height={Math.max(160, data.slice(0, 10).length * 24)}>
           <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 60, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
@@ -68,7 +68,7 @@ export function RecoveryAnalysis({ data }: { data: RecoveryEntry[] }) {
               contentStyle={{ fontSize: 12 }}
             />
             <Bar dataKey="recovery" radius={[0, 4, 4, 0]}>
-              {chartData.map((entry, i) => (
+              {chartData.slice(0, 10).map((entry, i) => (
                 <Cell key={i} fill={entry.fill} />
               ))}
               <LabelList

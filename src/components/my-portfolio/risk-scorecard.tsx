@@ -73,7 +73,7 @@ export function RiskScorecard({ data }: { data: RiskData }) {
         {/* Concentration curve */}
         <div>
           <p className="text-xs text-muted-foreground mb-2">Concentration Curve — cumulative weight by position count</p>
-          <ResponsiveContainer width="100%" height={160}>
+          <ResponsiveContainer width="100%" height={120}>
             <AreaChart data={data.concentrationCurve} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="position" tick={{ fontSize: 10 }} label={{ value: "# of stocks", position: "insideBottom", offset: -2, fontSize: 10 }} />

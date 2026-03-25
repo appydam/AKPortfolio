@@ -37,14 +37,14 @@ export function MFBreakdown({ categories }: { categories: MFCategory[] }) {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={210}>
             <PieChart>
               <Pie
                 data={categories.map((c) => ({ name: c.category, value: c.currentValue }))}
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={100}
+                innerRadius={50}
+                outerRadius={82}
                 dataKey="value"
                 paddingAngle={2}
               >

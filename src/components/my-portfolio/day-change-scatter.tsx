@@ -68,7 +68,7 @@ export function DayChangeScatter({ data }: { data: DayChangeData }) {
         </div>
 
         {/* Scatter chart */}
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={220}>
           <ScatterChart margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis

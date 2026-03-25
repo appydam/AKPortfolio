@@ -68,7 +68,7 @@ export function PnlDistribution({ distribution, summary }: Props) {
         </div>
 
         {/* Histogram */}
-        <ResponsiveContainer width="100%" height={200}>
+        <ResponsiveContainer width="100%" height={150}>
           <BarChart data={distribution} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="range" tick={{ fontSize: 10 }} />

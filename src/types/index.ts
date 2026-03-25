@@ -78,3 +78,104 @@ export interface HoldingWithPrice extends Holding {
   change_pct: number;
   market_value: number;
 }
+
+// ─── Insights Engine Types ───
+
+export interface ConvictionScore {
+  stockId: number;
+  symbol: string;
+  name: string;
+  score: number; // 0-100
+  breakdown: {
+    positionSize: number;  // 0-25
+    addOnDeals: number;    // 0-20
+    holdingPeriod: number; // 0-25
+    averagedDown: number;  // 0-15
+    dealFrequency: number; // 0-15
+  };
+  maturity: "New" | "Established" | "Long-term" | "Veteran";
+  firstSeenQuarter: string;
+  quartersHeld: number;
+  currentWeight: number; // % of portfolio
+}
+
+export interface EntryQualityAnalysis {
+  stockId: number;
+  symbol: string;
+  name: string;
+  avgEntryPrice: number;
+  currentPrice: number;
+  currentReturn: number;
+  maxDrawdownFromEntry: number;
+  quality: "Excellent" | "Good" | "Average" | "Poor";
+  holdingDays: number;
+}
+
+export interface DealPattern {
+  stockId: number;
+  symbol: string;
+  name: string;
+  pattern: "averaging_down" | "trimming_into_strength" | "accumulation" | "distribution" | "one_time_buy" | "mixed";
+  dealCount: number;
+  description: string;
+}
+
+export interface PortfolioDrawdown {
+  maxDrawdownPct: number;
+  peakDate: string;
+  peakValue: number;
+  troughDate: string;
+  troughValue: number;
+  recoveryDate: string | null;
+  recoveryDays: number | null;
+  currentDrawdownPct: number;
+}
+
+export interface PortfolioBeta {
+  beta: number;
+  correlation: number;
+  alpha: number;
+  interpretation: string;
+}
+
+export interface WinLossStats {
+  totalExits: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  avgWinPct: number;
+  avgLossPct: number;
+  bestExit: { symbol: string; returnPct: number } | null;
+  worstExit: { symbol: string; returnPct: number } | null;
+}
+
+export interface Attribution {
+  symbol: string;
+  name: string;
+  contribution: number;
+  contributionPct: number;
+  priceChangePct: number;
+  weight: number;
+}
+
+export interface SectorRotation {
+  quarter: string;
+  sectors: Array<{
+    sector: string;
+    weight: number;
+    stockCount: number;
+  }>;
+}
+
+export interface InsightsPayload {
+  computedAt: string;
+  conviction: ConvictionScore[];
+  entryQuality: EntryQualityAnalysis[];
+  dealPatterns: DealPattern[];
+  drawdown: PortfolioDrawdown;
+  beta: PortfolioBeta;
+  winLoss: WinLossStats;
+  topContributors: Attribution[];
+  bottomDetractors: Attribution[];
+  sectorRotation: SectorRotation[];
+}
