@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ sym
     .from("deals")
     .select("deal_date, exchange, deal_type, action, quantity, avg_price, pct_traded")
     .eq("stock_id", stock.id)
-    .order("deal_date", { ascending: false });
+    .order("deal_date_parsed", { ascending: false, nullsFirst: false });
 
   // 5. Current price
   const { data: priceData } = await db

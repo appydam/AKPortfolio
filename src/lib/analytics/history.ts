@@ -39,7 +39,7 @@ export async function buildPortfolioTimeline(): Promise<void> {
   const { data: deals } = await db
     .from("deals")
     .select("*, stocks(symbol, name)")
-    .order("deal_date", { ascending: true })
+    .order("deal_date_parsed", { ascending: true, nullsFirst: false })
     .order("id", { ascending: true });
 
   if (!deals || deals.length === 0) {

@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     let dealsQuery = db
       .from("deals")
       .select("*, stocks(symbol, name)")
-      .order("deal_date", { ascending: false })
+      .order("deal_date_parsed", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 

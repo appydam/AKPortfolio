@@ -66,7 +66,7 @@ export async function getEstimatedHoldings(): Promise<EstimatedHolding[]> {
     .from("deals")
     .select("stock_id, action, quantity")
     .gt("deal_date", quarterEndStr)
-    .order("deal_date", { ascending: true });
+    .order("deal_date_parsed", { ascending: true, nullsFirst: false });
 
   // Compute deal adjustments per stock
   const adjustments = new Map<number, number>();

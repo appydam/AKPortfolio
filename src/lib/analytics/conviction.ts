@@ -37,7 +37,7 @@ export async function getConvictionScores(): Promise<ConvictionScore[]> {
     .from("deals")
     .select("stock_id, action, avg_price, deal_date")
     .in("stock_id", stockIds)
-    .order("deal_date", { ascending: true });
+    .order("deal_date_parsed", { ascending: true, nullsFirst: false });
 
   // 4. Get prices for position weight
   const symbols = holdingsData.map((h: Record<string, unknown>) => {
@@ -170,7 +170,7 @@ export async function getDealPatterns(): Promise<DealPattern[]> {
   const { data: dealsData } = await db
     .from("deals")
     .select("stock_id, action, avg_price, deal_date, stocks(symbol, name)")
-    .order("deal_date", { ascending: true });
+    .order("deal_date_parsed", { ascending: true, nullsFirst: false });
 
   if (!dealsData || dealsData.length === 0) return [];
 
@@ -284,7 +284,7 @@ export async function getEntryQualityAnalysis(): Promise<EntryQualityAnalysis[]>
     .select("stock_id, quantity, avg_price, deal_date")
     .in("stock_id", stockIds)
     .eq("action", "Buy")
-    .order("deal_date", { ascending: true });
+    .order("deal_date_parsed", { ascending: true, nullsFirst: false });
 
   // Current prices
   const symbols = holdingsData.map((h: Record<string, unknown>) => {
