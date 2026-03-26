@@ -13,6 +13,7 @@ import {
   jobVolumeAnomalies,
   jobCorporateActions,
   jobDailyEstimate,
+  jobDailyDigest,
 } from "@/lib/jobs/scheduler";
 import { computeInsights } from "@/lib/analytics/insights";
 import { getDb } from "@/lib/db";
@@ -81,6 +82,9 @@ export async function GET(request: NextRequest) {
       case "daily-estimate":
         result = await jobDailyEstimate();
         break;
+      case "daily-digest":
+        result = await jobDailyDigest();
+        break;
       case "insights": {
         const insights = await computeInsights();
         const db = getDb();
@@ -115,7 +119,7 @@ export async function GET(request: NextRequest) {
               "prices", "trendlyne", "nse", "bse", "moneycontrol",
               "sebi-shp", "today-deals", "diff",
               "fundamentals", "snapshot", "insights",
-              "volume-scan", "corp-actions", "daily-estimate", "all-deals"
+              "volume-scan", "corp-actions", "daily-estimate", "daily-digest", "all-deals"
             ]
           },
           { status: 400 }

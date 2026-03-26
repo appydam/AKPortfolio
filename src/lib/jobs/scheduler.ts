@@ -10,6 +10,7 @@ import { runDiffAndAlert } from "../analytics/deal-diff";
 import { detectVolumeAnomalies } from "../analytics/volume-anomaly";
 import { scanCorporateActions } from "../analytics/corporate-actions";
 import { getDailyEstimate } from "../analytics/daily-estimator";
+import { sendDailyDigest } from "../notifications/daily-digest";
 import { refreshAllAggregatedPrices } from "../prices/aggregator";
 import { shouldSkipSource } from "../health/monitor";
 import { getDb } from "../db";
@@ -249,4 +250,11 @@ export async function jobDailyEstimate(): Promise<{ value: number; holdings: num
   );
 
   return { value: estimate.estimatedValue, holdings: estimate.numHoldings };
+}
+
+// NEW: Daily Telegram digest — runs at 6:30 PM IST
+export async function jobDailyDigest(): Promise<{ sent: boolean }> {
+  console.log("[Jobs] Sending daily digest...");
+  await sendDailyDigest();
+  return { sent: true };
 }

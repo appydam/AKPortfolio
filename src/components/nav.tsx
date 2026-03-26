@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FileText, Brain, Activity, PieChart, Clock, Wallet, Radar } from "lucide-react";
+import { BarChart3, FileText, Brain, Activity, PieChart, Clock, Wallet, Radar, Users, Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
 import { AlertsBell } from "./dashboard/alerts-panel";
 
 const links = [
@@ -13,9 +14,24 @@ const links = [
   { href: "/analytics", label: "Analytics", icon: PieChart },
   { href: "/timeline", label: "Timeline", icon: Clock },
   { href: "/health", label: "Health", icon: Activity },
+  { href: "/bigbulls", label: "Big Bulls", icon: Users },
   { href: "/sources", label: "Sources", icon: Radar },
   { href: "/my-portfolio", label: "My Portfolio", icon: Wallet },
 ];
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  return (
+    <button
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+      aria-label="Toggle theme"
+    >
+      <Sun className="h-4 w-4 hidden dark:block" />
+      <Moon className="h-4 w-4 block dark:hidden" />
+    </button>
+  );
+}
 
 export function Nav() {
   const pathname = usePathname();
@@ -46,7 +62,10 @@ export function Nav() {
             ))}
           </nav>
         </div>
-        <AlertsBell />
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <AlertsBell />
+        </div>
       </div>
     </header>
   );

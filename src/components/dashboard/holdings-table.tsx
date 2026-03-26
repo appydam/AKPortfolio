@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ArrowUpDown, Search } from "lucide-react";
+import Link from "next/link";
 import type { HoldingWithPrice } from "@/types";
 
 interface HoldingsTableProps {
@@ -113,12 +114,12 @@ export function HoldingsTable({ holdings }: HoldingsTableProps) {
               </TableRow>
             ) : (
               filtered.map((h) => (
-                <TableRow key={h.id}>
+                <TableRow key={h.id} className="cursor-pointer hover:bg-accent/50">
                   <TableCell>
-                    <div>
-                      <div className="font-medium">{h.stock_name}</div>
+                    <Link href={`/stock/${h.symbol}`} className="block">
+                      <div className="font-medium text-primary hover:underline">{h.stock_name}</div>
                       <div className="text-xs text-muted-foreground">{h.symbol}</div>
-                    </div>
+                    </Link>
                   </TableCell>
                   <TableCell className="font-mono text-sm">
                     {h.shares_held?.toLocaleString("en-IN")}
