@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Brain, Wallet, Radar, Users, Moon, Sun } from "lucide-react";
+import { BarChart3, Brain, Wallet, Radar, Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { AlertsBell } from "./dashboard/alerts-panel";
 
 const links = [
   { href: "/", label: "Insights", icon: Brain },
-  { href: "/bigbulls", label: "Big Bulls", icon: Users },
   { href: "/sources", label: "Sources", icon: Radar },
   { href: "/my-portfolio", label: "My Portfolio", icon: Wallet },
 ];

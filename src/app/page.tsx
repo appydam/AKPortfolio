@@ -693,7 +693,6 @@ export default function CommandCenter() {
         <span>Quarter: {quarter} | Prices refresh every 5 min | {insightsData?.computedAt ? `Insights: ${new Date(insightsData.computedAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}` : ""}</span>
         <div className="flex gap-3">
           <Link href="/sources" className="hover:text-foreground">17 Sources</Link>
-          <Link href="/bigbulls" className="hover:text-foreground">Big Bulls</Link>
         </div>
       </div>
     </div>
