@@ -27,21 +27,38 @@ interface SourceMetrics {
 // In-memory store for health metrics (resets on restart)
 const healthStore: Map<string, SourceMetrics> = new Map();
 
-// All tracked sources
+// All tracked sources — EVERY scraper and data source must be listed here
 const ALL_SOURCES = [
   // Price sources
   "nse",
   "google",
   "yahoo",
-  // Deal sources
-  "trendlyne",
-  "bse-rss",
-  "bse-announcements",
+  // Deal sources — exchange APIs
   "nse-csv",
   "nse-block",
+  "bse-csv",
+  "bse-block",
+  "bse-rss",
+  "bse-announcements",
+  // Deal sources — aggregators
+  "trendlyne",
+  "trendlyne-activity",
+  "tickertape",
+  "tickertape-activity",
   "moneycontrol",
+  // Holdings & filings
+  "sebi-shp",
+  "today-deals",
   // Fundamentals
   "screener",
+  // New intelligence scrapers
+  "insider-trades",
+  "sast-disclosures",
+  "promoter-pledges",
+  "fii-dii-activity",
+  "board-meetings",
+  // Big bulls
+  "bigbulls",
 ];
 
 function getOrCreateMetrics(source: string): SourceMetrics {
@@ -161,4 +178,63 @@ export function shouldSkipSource(source: string): boolean {
     }
   }
   return false;
+}
+
+// Persist health snapshot to Supabase (call periodically from cron)
+export async function persistHealthSnapshot(): Promise<void> {
+  try {
+    // Dynamic import to avoid circular deps
+    const { getDb } = await import("../db");
+    const db = getDb();
+    const all = getAllSourceHealth();
+    const overall = getOverallStatus();
+
+    await db.from("health_snapshots").upsert(
+      {
+        id: 1,
+        sources: JSON.stringify(all),
+        overall_status: overall.status,
+        healthy_count: overall.healthy,
+        degraded_count: overall.degraded,
+        down_count: overall.down,
+        snapshot_at: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    );
+  } catch (error) {
+    console.error("[Health] Failed to persist snapshot:", error);
+  }
+}
+
+// Restore health from DB on cold start (Vercel serverless)
+export async function restoreHealthFromDb(): Promise<void> {
+  try {
+    const { getDb } = await import("../db");
+    const db = getDb();
+    const { data } = await db
+      .from("health_snapshots")
+      .select("sources, snapshot_at")
+      .eq("id", 1)
+      .single();
+
+    if (!data?.sources) return;
+
+    const snapshotAge = Date.now() - new Date(data.snapshot_at).getTime();
+    // Only restore if snapshot is < 1 hour old
+    if (snapshotAge > 3600_000) return;
+
+    const sources: SourceHealth[] = JSON.parse(data.sources);
+    for (const s of sources) {
+      const metrics = getOrCreateMetrics(s.name);
+      metrics.successes = s.successCount;
+      metrics.failures = s.failureCount;
+      metrics.lastSuccess = s.lastSuccess;
+      metrics.lastFailure = s.lastFailure;
+      metrics.lastError = s.lastError;
+      metrics.consecutiveFailures = s.consecutiveFailures;
+    }
+    console.log("[Health] Restored health metrics from DB snapshot");
+  } catch {
+    // Ignore — fresh start is fine
+  }
 }

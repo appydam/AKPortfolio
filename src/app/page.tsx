@@ -304,30 +304,28 @@ export default function CommandCenter() {
             </div>
           </div>
 
-          {/* Bottom row: Recent deals + Quick conviction */}
-          <div className="grid gap-3 lg:grid-cols-2">
-            <DealFeed deals={deals.slice(0, 8)} />
-            <Card>
-              <CardHeader className="pb-1 pt-3 px-3">
-                <CardTitle className="text-sm flex items-center gap-1.5">
-                  <Target className="h-3.5 w-3.5" /> Highest Conviction Stocks
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-3 pb-3">
-                <div className="space-y-1.5">
-                  {conviction.slice(0, 8).map((c: Record<string, unknown>, i: number) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <span className="w-4 text-muted-foreground text-right">{i + 1}</span>
-                      <span className={`w-7 font-bold ${(c.score as number) >= 50 ? "text-green-600" : (c.score as number) >= 25 ? "text-amber-600" : "text-muted-foreground"}`}>{c.score as number}</span>
-                      <Link href={`/stock/${c.symbol}`} className="font-medium text-primary hover:underline w-20 truncate">{c.symbol as string}</Link>
-                      <Badge className="text-[9px]" variant="outline">{c.maturity as string}</Badge>
-                      <span className="text-muted-foreground ml-auto">{(c.currentWeight as number)?.toFixed(1)}%</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Bottom: Conviction quick list */}
+          <Card>
+            <CardHeader className="pb-1 pt-3 px-3">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <Target className="h-3.5 w-3.5" /> Top Conviction Stocks
+              </CardTitle>
+              <p className="text-[10px] text-muted-foreground">Ranked by how much Kacholia believes in each stock — based on position size, buying behavior, and holding duration</p>
+            </CardHeader>
+            <CardContent className="px-3 pb-3">
+              <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                {conviction.slice(0, 10).map((c: Record<string, unknown>, i: number) => (
+                  <Link key={i} href={`/stock/${c.symbol}`} className="flex items-center gap-2 text-xs py-1 hover:bg-accent/50 rounded px-1">
+                    <span className="w-4 text-muted-foreground text-right">{i + 1}</span>
+                    <span className={`w-7 font-bold ${(c.score as number) >= 50 ? "text-green-600" : (c.score as number) >= 25 ? "text-amber-600" : "text-muted-foreground"}`}>{c.score as number}</span>
+                    <span className="font-medium text-primary w-20 truncate">{c.symbol as string}</span>
+                    <Badge className="text-[9px]" variant="outline">{c.maturity as string}</Badge>
+                    <span className="text-muted-foreground ml-auto">{(c.currentWeight as number)?.toFixed(1)}% of portfolio</span>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -396,25 +394,59 @@ export default function CommandCenter() {
 
       {/* DEALS & PATTERNS */}
       {activeSection === "deals" && (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="space-y-3">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">All Deals ({dealsData?.total || 0})</CardTitle>
+              <CardTitle className="text-base">Bulk & Block Deals ({dealsData?.total || 0})</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Every publicly disclosed trade where Kacholia (or his entities) bought/sold &gt;1% of a company in a single transaction.
+                These are official NSE/BSE filings — the fastest public signal of his activity.
+              </p>
             </CardHeader>
             <CardContent>
-              <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
-                {deals.map((d: Record<string, unknown>, i: number) => (
-                  <div key={i} className="flex items-center justify-between text-xs border-b pb-1.5 last:border-0">
-                    <div className="flex items-center gap-2">
-                      <Badge className={`text-[9px] ${(d.action as string) === "Buy" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>{d.action as string}</Badge>
-                      <Link href={`/stock/${d.symbol}`} className="font-medium text-primary hover:underline">{d.symbol as string}</Link>
-                      <span className="text-muted-foreground">{d.deal_date as string}</span>
-                    </div>
-                    <div className="text-right font-mono">
-                      {(d.quantity as number)?.toLocaleString("en-IN")} @ ₹{(d.avg_price as number)?.toFixed(0)}
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left pb-1.5 font-medium">Date</th>
+                      <th className="text-left pb-1.5 font-medium">Stock</th>
+                      <th className="text-left pb-1.5 font-medium">Action</th>
+                      <th className="text-right pb-1.5 font-medium">Shares</th>
+                      <th className="text-right pb-1.5 font-medium">Price</th>
+                      <th className="text-right pb-1.5 font-medium">Value</th>
+                      <th className="text-right pb-1.5 font-medium">% of Co.</th>
+                      <th className="text-left pb-1.5 font-medium">Exchange</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deals.map((d: Record<string, unknown>, i: number) => {
+                      const qty = d.quantity as number || 0;
+                      const price = d.avg_price as number || 0;
+                      const value = qty * price;
+                      const pctTraded = d.pct_traded as number | null;
+                      return (
+                        <tr key={i} className="border-b last:border-0 hover:bg-accent/50">
+                          <td className="py-1.5 text-muted-foreground whitespace-nowrap">{d.deal_date as string}</td>
+                          <td className="py-1.5">
+                            <Link href={`/stock/${d.symbol}`} className="font-medium text-primary hover:underline">{d.symbol as string}</Link>
+                          </td>
+                          <td className="py-1.5">
+                            <Badge className={`text-[9px] ${(d.action as string) === "Buy" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                              {d.action as string}
+                            </Badge>
+                          </td>
+                          <td className="py-1.5 text-right font-mono">{qty.toLocaleString("en-IN")}</td>
+                          <td className="py-1.5 text-right font-mono">{price.toFixed(0)}</td>
+                          <td className="py-1.5 text-right font-mono">{(value / 1e7).toFixed(1)} Cr</td>
+                          <td className="py-1.5 text-right font-mono">
+                            {pctTraded ? `${pctTraded.toFixed(2)}%` : "—"}
+                          </td>
+                          <td className="py-1.5 text-muted-foreground">{d.exchange as string}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -422,11 +454,95 @@ export default function CommandCenter() {
         </div>
       )}
 
-      {/* RISK & PERFORMANCE */}
+      {/* RISK & PORTFOLIO HEALTH */}
       {activeSection === "risk" && (
         <div className="space-y-3">
-          <RiskPulse drawdown={drawdown} beta={beta} winLoss={winLoss} concentration={analyticsData?.concentration} />
-          <PerformanceAttribution topContributors={topContributors} bottomDetractors={bottomDetractors} />
+          {/* Concentration Risk — always has data */}
+          {analyticsData?.concentration && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Concentration Risk</CardTitle>
+                <p className="text-xs text-muted-foreground">How diversified is Kacholia&apos;s portfolio? Higher concentration = higher risk but also higher conviction.</p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-4">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-[10px] text-muted-foreground">Top 5 Stocks</p>
+                    <p className="text-xl font-bold">{analyticsData.concentration.top5Pct}%</p>
+                    <p className="text-[10px] text-muted-foreground">of total portfolio</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-[10px] text-muted-foreground">Top 10 Stocks</p>
+                    <p className="text-xl font-bold">{analyticsData.concentration.top10Pct}%</p>
+                    <p className="text-[10px] text-muted-foreground">of total portfolio</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-[10px] text-muted-foreground">HHI Index</p>
+                    <p className="text-xl font-bold">{analyticsData.concentration.hhi}</p>
+                    <p className="text-[10px] text-muted-foreground">{analyticsData.concentration.hhi < 1000 ? "Diversified" : analyticsData.concentration.hhi < 1800 ? "Moderately concentrated" : "Highly concentrated"}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-[10px] text-muted-foreground">Risk Level</p>
+                    <p className={`text-xl font-bold ${analyticsData.concentration.riskLevel === "low" ? "text-green-600" : analyticsData.concentration.riskLevel === "moderate" ? "text-amber-600" : "text-red-600"}`}>
+                      {analyticsData.concentration.riskLevel.charAt(0).toUpperCase() + analyticsData.concentration.riskLevel.slice(1)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{holdings.length} stocks total</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Entry Quality Summary */}
+          {entryQuality.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Entry Quality Summary</CardTitle>
+                <p className="text-xs text-muted-foreground">How well did Kacholia time his entries? Based on average buy price vs current market price.</p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-4 mb-4">
+                  <div className="rounded-lg border p-3 text-center">
+                    <p className="text-2xl font-bold text-green-600">{entryQuality.filter((e: { quality: string }) => e.quality === "Excellent").length}</p>
+                    <p className="text-[10px] text-muted-foreground">Excellent (&gt;50% return)</p>
+                  </div>
+                  <div className="rounded-lg border p-3 text-center">
+                    <p className="text-2xl font-bold text-blue-600">{entryQuality.filter((e: { quality: string }) => e.quality === "Good").length}</p>
+                    <p className="text-[10px] text-muted-foreground">Good (20-50% return)</p>
+                  </div>
+                  <div className="rounded-lg border p-3 text-center">
+                    <p className="text-2xl font-bold text-amber-600">{entryQuality.filter((e: { quality: string }) => e.quality === "Average").length}</p>
+                    <p className="text-[10px] text-muted-foreground">Average (0-20% return)</p>
+                  </div>
+                  <div className="rounded-lg border p-3 text-center">
+                    <p className="text-2xl font-bold text-red-600">{entryQuality.filter((e: { quality: string }) => e.quality === "Poor").length}</p>
+                    <p className="text-[10px] text-muted-foreground">Poor (negative return)</p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Note: Entry quality is calculated only for stocks where we have bulk deal data (entry price). Many holdings were acquired below the bulk deal threshold, so entry price data is limited.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Drawdown & Beta — show only if we have data */}
+          {(drawdown.maxDrawdownPct !== 0 || topContributors.length > 0) && (
+            <>
+              <RiskPulse drawdown={drawdown} beta={beta} winLoss={winLoss} />
+              <PerformanceAttribution topContributors={topContributors} bottomDetractors={bottomDetractors} />
+            </>
+          )}
+
+          {/* Explain if sections are empty */}
+          {drawdown.maxDrawdownPct === 0 && topContributors.length === 0 && (
+            <Card>
+              <CardContent className="py-6 text-center text-sm text-muted-foreground">
+                <p className="font-medium mb-1">Drawdown, Beta & Attribution — Building Data</p>
+                <p className="text-xs">These metrics need multiple daily snapshots to compute. The system takes a snapshot every market day at 4 PM IST. After a few days of data, you&apos;ll see: max drawdown from peak, portfolio beta vs NIFTY50, and which stocks are driving or dragging returns.</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
