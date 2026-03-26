@@ -12,8 +12,15 @@ import { scanCorporateActions } from "../analytics/corporate-actions";
 import { getDailyEstimate } from "../analytics/daily-estimator";
 import { sendDailyDigest } from "../notifications/daily-digest";
 import { refreshAllAggregatedPrices } from "../prices/aggregator";
-import { shouldSkipSource } from "../health/monitor";
+import { shouldSkipSource, persistHealthSnapshot } from "../health/monitor";
 import { getDb } from "../db";
+// New intelligence scrapers
+import { scrapeInsiderTrades } from "../scrapers/insider-trades";
+import { scrapeSastDisclosures } from "../scrapers/sast-disclosures";
+import { scrapePromoterPledges } from "../scrapers/promoter-pledges";
+import { scrapeFiiDiiActivity } from "../scrapers/fii-dii-activity";
+import { scrapeBoardMeetings } from "../scrapers/board-meetings";
+import { resolveAllMissingBseCodes, mergeOrphanedBseStocks } from "../bse-mapper";
 
 function isMarketDay(): boolean {
   const now = new Date();
@@ -39,7 +46,7 @@ function isAfterMarketClose(): boolean {
   const hours = ist.getHours();
   const minutes = ist.getMinutes();
   const timeInMinutes = hours * 60 + minutes;
-  return timeInMinutes >= 1020; // after 5 PM IST (exchange files published ~5:30-6:30 PM)
+  return timeInMinutes >= 945; // after 3:45 PM IST (15 min after market close)
 }
 
 // ─────────────────────────────────────────────
@@ -257,4 +264,76 @@ export async function jobDailyDigest(): Promise<{ sent: boolean }> {
   console.log("[Jobs] Sending daily digest...");
   await sendDailyDigest();
   return { sent: true };
+}
+
+// ─────────────────────────────────────────────
+// NEW INTELLIGENCE JOBS (v2)
+// ─────────────────────────────────────────────
+
+// Insider trading disclosures — 2-day signal (much faster than quarterly SHP)
+export async function jobInsiderTrades(): Promise<{ newTrades: number }> {
+  if (shouldSkipSource("insider-trades")) {
+    console.log("[Jobs] Skipping insider trades (source unhealthy)");
+    return { newTrades: 0 };
+  }
+  console.log("[Jobs] Scanning for insider trading disclosures...");
+  const newTrades = await scrapeInsiderTrades();
+  return { newTrades };
+}
+
+// SAST threshold crossing disclosures
+export async function jobSastDisclosures(): Promise<{ newDisclosures: number }> {
+  if (shouldSkipSource("sast-disclosures")) {
+    console.log("[Jobs] Skipping SAST (source unhealthy)");
+    return { newDisclosures: 0 };
+  }
+  console.log("[Jobs] Scanning for SAST threshold crossings...");
+  const newDisclosures = await scrapeSastDisclosures();
+  return { newDisclosures };
+}
+
+// Promoter pledge tracking
+export async function jobPromoterPledges(): Promise<{ updated: number }> {
+  if (shouldSkipSource("promoter-pledges")) {
+    console.log("[Jobs] Skipping promoter pledges (source unhealthy)");
+    return { updated: 0 };
+  }
+  console.log("[Jobs] Scanning for promoter pledge data...");
+  const updated = await scrapePromoterPledges();
+  return { updated };
+}
+
+// FII/DII institutional activity
+export async function jobFiiDiiActivity(): Promise<{ updated: number }> {
+  if (shouldSkipSource("fii-dii-activity")) {
+    console.log("[Jobs] Skipping FII/DII (source unhealthy)");
+    return { updated: 0 };
+  }
+  console.log("[Jobs] Scanning for FII/DII activity...");
+  const updated = await scrapeFiiDiiActivity();
+  return { updated };
+}
+
+// Board meeting tracker
+export async function jobBoardMeetings(): Promise<{ newMeetings: number }> {
+  if (shouldSkipSource("board-meetings")) {
+    console.log("[Jobs] Skipping board meetings (source unhealthy)");
+    return { newMeetings: 0 };
+  }
+  console.log("[Jobs] Scanning for board meetings...");
+  const newMeetings = await scrapeBoardMeetings();
+  return { newMeetings };
+}
+
+// BSE code resolver — fills in missing bse_code mappings & merges orphans
+export async function jobResolveBseCodes(): Promise<{ resolved: number; merged: number }> {
+  console.log("[Jobs] Resolving BSE codes and merging orphans...");
+  const resolved = await resolveAllMissingBseCodes();
+  const merged = await mergeOrphanedBseStocks();
+  return { resolved, merged };
+}
+
+// Health snapshot persistence — saves health state to DB
+export async function jobPersistHealth(): Promise<void> {
+  await persistHealthSnapshot();
 }

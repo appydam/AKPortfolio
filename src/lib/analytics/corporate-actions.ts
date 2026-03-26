@@ -17,17 +17,11 @@ interface CorporateAction {
 }
 
 // Fetch corporate actions from NSE
-async function fetchNseCorporateActions(symbol: string, cookies: string): Promise<CorporateAction[]> {
+async function fetchNseCorporateActions(symbol: string, _cookies?: string): Promise<CorporateAction[]> {
   try {
+    const { nseFetch } = await import("../nse-session");
     const url = `https://www.nseindia.com/api/corporates-corporateActions?index=equities&symbol=${encodeURIComponent(symbol)}`;
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        Accept: "application/json",
-        Cookie: cookies,
-        Referer: "https://www.nseindia.com/",
-      },
-    });
+    const res = await nseFetch(url);
     if (!res.ok) return [];
 
     const data = await res.json();
@@ -107,27 +101,6 @@ async function fetchNseCorporateActions(symbol: string, cookies: string): Promis
   }
 }
 
-let _nseCookies: string | null = null;
-let _cookieExpiry = 0;
-
-async function refreshNseCookies(): Promise<string> {
-  const now = Date.now();
-  if (_nseCookies && now < _cookieExpiry) return _nseCookies;
-  try {
-    const res = await fetch("https://www.nseindia.com", {
-      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", Accept: "text/html" },
-    });
-    const setCookies = res.headers.getSetCookie?.() || [];
-    const cookieStr = setCookies.map((c) => c.split(";")[0]).join("; ");
-    if (cookieStr) {
-      _nseCookies = cookieStr;
-      _cookieExpiry = now + 4 * 60 * 1000;
-      return cookieStr;
-    }
-  } catch { /* ignore */ }
-  return _nseCookies || "";
-}
-
 // Scan all portfolio stocks for recent corporate actions
 export async function scanCorporateActions(): Promise<CorporateAction[]> {
   console.log("[CorpActions] Scanning portfolio for corporate actions...");
@@ -149,7 +122,6 @@ export async function scanCorporateActions(): Promise<CorporateAction[]> {
 
   if (!holdings || holdings.length === 0) return [];
 
-  const cookies = await refreshNseCookies();
   const allActions: CorporateAction[] = [];
 
   for (const h of holdings) {
@@ -157,7 +129,7 @@ export async function scanCorporateActions(): Promise<CorporateAction[]> {
     const symbol = (stock?.symbol as string) || "";
     if (!symbol || symbol.startsWith("BSE:")) continue;
 
-    const actions = await fetchNseCorporateActions(symbol, cookies);
+    const actions = await fetchNseCorporateActions(symbol);
 
     // For splits and bonus issues, apply the adjustment to holdings
     for (const action of actions) {
@@ -221,7 +193,6 @@ export async function getRecentCorporateActions(): Promise<CorporateAction[]> {
 
   if (!holdings || holdings.length === 0) return [];
 
-  const cookies = await refreshNseCookies();
   const actions: CorporateAction[] = [];
 
   // Only check first 15 stocks to stay within time limits
@@ -231,7 +202,7 @@ export async function getRecentCorporateActions(): Promise<CorporateAction[]> {
     const symbol = (stock?.symbol as string) || "";
     if (!symbol || symbol.startsWith("BSE:")) continue;
 
-    const stockActions = await fetchNseCorporateActions(symbol, cookies);
+    const stockActions = await fetchNseCorporateActions(symbol);
     actions.push(...stockActions.filter(a => a.actionType !== "other"));
     await new Promise((r) => setTimeout(r, 300));
   }

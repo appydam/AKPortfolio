@@ -1,43 +1,9 @@
 import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
 import { isKacholiaEntity } from "../entities";
+import { nseFetch } from "../nse-session";
 
-// NSE publishes daily bulk deal CSV/archives
 const NSE_BULK_DEALS_URL = "https://www.nseindia.com/api/historical/bulk-deals";
-const NSE_HOME = "https://www.nseindia.com";
-
-// NSE requires session cookies just like for quotes
-let nseCookies: string | null = null;
-let cookieExpiry = 0;
-
-async function refreshNseCookies(): Promise<string> {
-  const now = Date.now();
-  if (nseCookies && now < cookieExpiry) return nseCookies;
-
-  try {
-    const res = await fetch(NSE_HOME, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html",
-      },
-      redirect: "follow",
-    });
-
-    const setCookies = res.headers.getSetCookie?.() || [];
-    const cookieStr = setCookies.map((c) => c.split(";")[0]).join("; ");
-
-    if (cookieStr) {
-      nseCookies = cookieStr;
-      cookieExpiry = now + 4 * 60 * 1000;
-      return cookieStr;
-    }
-  } catch (err) {
-    console.error("[NSE-CSV] Cookie refresh failed:", err);
-  }
-
-  return nseCookies || "";
-}
 
 function formatDate(date: Date): string {
   const dd = String(date.getDate()).padStart(2, "0");
@@ -51,22 +17,12 @@ export async function scrapeNseBulkDeals(daysBack: number = 7): Promise<number> 
   const start = Date.now();
 
   try {
-    const cookies = await refreshNseCookies();
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysBack);
 
     const url = `${NSE_BULK_DEALS_URL}?from=${formatDate(startDate)}&to=${formatDate(endDate)}`;
-
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "application/json",
-        Cookie: cookies,
-        Referer: NSE_HOME,
-      },
-    });
+    const res = await nseFetch(url);
 
     if (!res.ok) {
       throw new Error(`NSE bulk deals API failed: ${res.status}`);
@@ -136,22 +92,12 @@ export async function scrapeNseBlockDeals(daysBack: number = 7): Promise<number>
   const start = Date.now();
 
   try {
-    const cookies = await refreshNseCookies();
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysBack);
 
     const url = `https://www.nseindia.com/api/historical/block-deals?from=${formatDate(startDate)}&to=${formatDate(endDate)}`;
-
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "application/json",
-        Cookie: cookies,
-        Referer: NSE_HOME,
-      },
-    });
+    const res = await nseFetch(url);
 
     if (!res.ok) throw new Error(`NSE block deals API failed: ${res.status}`);
 

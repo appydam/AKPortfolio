@@ -2,19 +2,13 @@ import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
 import { notifyNewDeal } from "../notifications/telegram";
 import { isKacholiaEntity } from "../entities";
+import { nseFetch, NSE_HEADERS } from "../nse-session";
 
 // Fast-path checker for TODAY's bulk/block deals
 // NSE and BSE both publish EOD files ~5:30-6:30 PM IST
 // We poll these aggressively after market close to catch deals ASAP
 
-const NSE_HOME = "https://www.nseindia.com";
-
-const HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  Accept: "application/json",
-  "Accept-Language": "en-US,en;q=0.9",
-};
+const HEADERS = NSE_HEADERS;
 
 function parseNumber(text: string): number {
   return parseFloat(String(text).replace(/,/g, "").replace(/[^\d.\-]/g, "")) || 0;
@@ -28,43 +22,17 @@ function todayStr(): string {
   return `${dd}-${mm}-${yyyy}`;
 }
 
-let nseCookies: string | null = null;
-let cookieExpiry = 0;
-
-async function refreshNseCookies(): Promise<string> {
-  const now = Date.now();
-  if (nseCookies && now < cookieExpiry) return nseCookies;
-  try {
-    const res = await fetch(NSE_HOME, {
-      headers: { "User-Agent": HEADERS["User-Agent"], Accept: "text/html" },
-    });
-    const setCookies = res.headers.getSetCookie?.() || [];
-    const cookieStr = setCookies.map((c) => c.split(";")[0]).join("; ");
-    if (cookieStr) {
-      nseCookies = cookieStr;
-      cookieExpiry = now + 4 * 60 * 1000;
-      return cookieStr;
-    }
-  } catch {
-    // ignore
-  }
-  return nseCookies || "";
-}
-
 // NSE today's bulk deals — available as JSON ~30 min after market close
 async function fetchNseTodayBulkDeals(): Promise<Array<{
   symbol: string; name: string; action: string; quantity: number; avgPrice: number; date: string;
 }>> {
   const today = todayStr();
-  const cookies = await refreshNseCookies();
 
   const results: Array<{ symbol: string; name: string; action: string; quantity: number; avgPrice: number; date: string }> = [];
 
   // Endpoint 1: historical bulk deals for today
   const url = `https://www.nseindia.com/api/historical/bulk-deals?from=${today}&to=${today}`;
-  const res = await fetch(url, {
-    headers: { ...HEADERS, Cookie: cookies, Referer: NSE_HOME },
-  });
+  const res = await nseFetch(url);
 
   if (res.ok) {
     const data = await res.json();
@@ -85,9 +53,7 @@ async function fetchNseTodayBulkDeals(): Promise<Array<{
   // Endpoint 2: block deals for today
   await new Promise((r) => setTimeout(r, 1000));
   const blockUrl = `https://www.nseindia.com/api/historical/block-deals?from=${today}&to=${today}`;
-  const blockRes = await fetch(blockUrl, {
-    headers: { ...HEADERS, Cookie: cookies, Referer: NSE_HOME },
-  });
+  const blockRes = await nseFetch(blockUrl);
 
   if (blockRes.ok) {
     const data = await blockRes.json();

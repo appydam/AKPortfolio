@@ -2,25 +2,16 @@ import * as cheerio from "cheerio";
 import { getDb, ensureStock } from "../db";
 import { recordSourceResult } from "../health/monitor";
 import { isKacholiaEntity } from "../entities";
+import { nseFetch, NSE_HEADERS } from "../nse-session";
 
 // SEBI SCORES + BSE/NSE filings — Shareholding Pattern (SHP) XML/HTML
 // Companies must file SHP within 21 days of quarter end
 // We monitor all companies in Kacholia's known portfolio for SHP changes
 
 const BSE_SHP_API = "https://api.bseindia.com/BseIndiaAPI/api/ShareHoldingPatterns/w";
-const NSE_SHP_URL = "https://www.nseindia.com/companies-listing/corporate-filings-shareholding-pattern";
 const NSE_SHP_API = "https://www.nseindia.com/api/corporate-share-holding-pattern";
 
-// BSE corporate filings XML feed — updated when companies file SHP
-const BSE_FILINGS_RSS = "https://www.bseindia.com/xml-data/corpfiling/AttachLive/";
-
-const HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  Accept: "application/json, text/html, */*",
-  "Accept-Language": "en-US,en;q=0.9",
-  Referer: "https://www.nseindia.com/",
-};
+const HEADERS = NSE_HEADERS;
 
 function parseNumber(text: string): number {
   return parseFloat(String(text).replace(/,/g, "").replace(/[^\d.\-]/g, "")) || 0;
@@ -41,11 +32,8 @@ function getCurrentQuarterEndDate(): string {
 // Fetch shareholding pattern for a specific company from NSE
 export async function fetchNseShp(symbol: string): Promise<{ kacholiaShares: number; kacholiaPct: number } | null> {
   try {
-    const cookies = await refreshNseCookies();
     const url = `${NSE_SHP_API}?symbol=${symbol}&shareHolderType=Promoter_and_Shareholding_Pattern`;
-    const res = await fetch(url, {
-      headers: { ...HEADERS, Cookie: cookies, Accept: "application/json" },
-    });
+    const res = await nseFetch(url);
 
     if (!res.ok) return null;
 
@@ -200,34 +188,6 @@ export async function scrapeSebiShp(): Promise<number> {
     console.error("[SEBI-SHP] Scrape failed:", error);
     return 0;
   }
-}
-
-// NSE cookie management (reuse from nse-csv pattern)
-let _nseCookies: string | null = null;
-let _cookieExpiry = 0;
-
-async function refreshNseCookies(): Promise<string> {
-  const now = Date.now();
-  if (_nseCookies && now < _cookieExpiry) return _nseCookies;
-
-  try {
-    const res = await fetch("https://www.nseindia.com", {
-      headers: {
-        "User-Agent": HEADERS["User-Agent"],
-        Accept: "text/html",
-      },
-    });
-    const setCookies = res.headers.getSetCookie?.() || [];
-    const cookieStr = setCookies.map((c) => c.split(";")[0]).join("; ");
-    if (cookieStr) {
-      _nseCookies = cookieStr;
-      _cookieExpiry = now + 4 * 60 * 1000;
-      return cookieStr;
-    }
-  } catch {
-    // ignore
-  }
-  return _nseCookies || "";
 }
 
 // Scan BSE corporate filings RSS for fresh SHP filings from Kacholia holdings

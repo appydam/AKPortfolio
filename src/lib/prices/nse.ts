@@ -38,11 +38,9 @@ export async function fetchNsePrice(symbol: string): Promise<PriceData | null> {
 export async function fetchNsePricesBatch(symbols: string[]): Promise<Record<string, PriceData>> {
   const results: Record<string, PriceData> = {};
 
-  // NSE doesn't have a batch endpoint, so we fetch sequentially with small delays
   for (const symbol of symbols) {
     const price = await fetchNsePrice(symbol);
     if (price) results[symbol] = price;
-    // 300ms delay to avoid rate limiting
     await new Promise((r) => setTimeout(r, 300));
   }
 

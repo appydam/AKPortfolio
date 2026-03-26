@@ -23,7 +23,11 @@ export default function BigBullsPage() {
           Big Bull Comparison
         </h1>
         <p className="text-sm text-muted-foreground">
-          Compare Ashish Kacholia&apos;s portfolio with India&apos;s top superstar investors. See who&apos;s buying what, where they overlap, and where they diverge.
+          Compare Ashish Kacholia with India&apos;s top superstar investors. See who&apos;s buying what, where they overlap, and where they diverge.
+        </p>
+        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+          Note: This shows only publicly disclosed &gt;1% holdings (SEBI SHP filings) — not full portfolios.
+          Actual net worth is significantly higher for most investors. Data sourced from Trendlyne.
         </p>
       </div>
 
@@ -59,6 +63,7 @@ export default function BigBullsPage() {
                     <div>
                       <p className="text-xs text-muted-foreground">Portfolio</p>
                       <p className="font-bold">{inv.totalValueCr as number > 0 ? `₹${inv.totalValueCr} Cr` : "N/A"}</p>
+                      <p className="text-[9px] text-muted-foreground">(disclosed only)</p>
                     </div>
                   </div>
                   <div>

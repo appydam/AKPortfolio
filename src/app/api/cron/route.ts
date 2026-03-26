@@ -14,6 +14,14 @@ import {
   jobCorporateActions,
   jobDailyEstimate,
   jobDailyDigest,
+  // New intelligence jobs
+  jobInsiderTrades,
+  jobSastDisclosures,
+  jobPromoterPledges,
+  jobFiiDiiActivity,
+  jobBoardMeetings,
+  jobResolveBseCodes,
+  jobPersistHealth,
 } from "@/lib/jobs/scheduler";
 import { computeInsights } from "@/lib/analytics/insights";
 import { getDb } from "@/lib/db";
@@ -95,6 +103,30 @@ export async function GET(request: NextRequest) {
         result = { computedAt: insights.computedAt, stocks: insights.conviction.length };
         break;
       }
+      // ── New intelligence jobs ──
+      case "insider-trades":
+        result = await jobInsiderTrades();
+        break;
+      case "sast":
+        result = await jobSastDisclosures();
+        break;
+      case "pledges":
+        result = await jobPromoterPledges();
+        break;
+      case "fii-dii":
+        result = await jobFiiDiiActivity();
+        break;
+      case "board-meetings":
+        result = await jobBoardMeetings();
+        break;
+      case "resolve-bse":
+        result = await jobResolveBseCodes();
+        break;
+      case "health-persist":
+        await jobPersistHealth();
+        result = { persisted: true };
+        break;
+      // ── Composite jobs ──
       case "all-deals": {
         const [trendlyne] = await Promise.allSettled([jobScrapeTrendlyne()]);
         await new Promise((r) => setTimeout(r, 2000));
@@ -111,6 +143,22 @@ export async function GET(request: NextRequest) {
         result = { trendlyne, nse, bse, mc, sebi };
         break;
       }
+      case "all-intelligence": {
+        // Run all new intelligence scrapers with delays between them
+        const [insider] = await Promise.allSettled([jobInsiderTrades()]);
+        await new Promise((r) => setTimeout(r, 2000));
+        const [sast, pledges] = await Promise.allSettled([
+          jobSastDisclosures(),
+          jobPromoterPledges(),
+        ]);
+        await new Promise((r) => setTimeout(r, 2000));
+        const [fiiDii, boards] = await Promise.allSettled([
+          jobFiiDiiActivity(),
+          jobBoardMeetings(),
+        ]);
+        result = { insider, sast, pledges, fiiDii, boards };
+        break;
+      }
       default:
         return NextResponse.json(
           {
@@ -119,16 +167,23 @@ export async function GET(request: NextRequest) {
               "prices", "trendlyne", "nse", "bse", "moneycontrol",
               "sebi-shp", "today-deals", "diff",
               "fundamentals", "snapshot", "insights",
-              "volume-scan", "corp-actions", "daily-estimate", "daily-digest", "all-deals"
+              "volume-scan", "corp-actions", "daily-estimate", "daily-digest",
+              "all-deals", "all-intelligence",
+              "insider-trades", "sast", "pledges", "fii-dii", "board-meetings",
+              "resolve-bse", "health-persist"
             ]
           },
           { status: 400 }
         );
     }
 
+    // Persist health metrics after every job run
+    jobPersistHealth().catch(() => null);
+
     return NextResponse.json({ success: true, job, result, ts: new Date().toISOString() });
   } catch (error) {
     console.error(`[Cron] Job '${job}' failed:`, error);
+    jobPersistHealth().catch(() => null);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

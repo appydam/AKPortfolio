@@ -1,12 +1,14 @@
 // Big Bull Investor Registry
-// Each superstar investor has a Trendlyne portfolio ID and known name variants.
+// Each superstar investor has a Trendlyne portfolio ID.
+// NOTE: Trendlyne only shows holdings where someone holds >1% of a company.
+// These are NOT full portfolios — just the publicly disclosed large positions.
 
 export interface InvestorProfile {
-  id: string; // unique slug
+  id: string;
   name: string;
-  trendlyneId: string; // Trendlyne portfolio ID for scraping
+  trendlyneId: string;
   trendlyneSlug: string;
-  nameVariants: string[]; // for matching in bulk deal data
+  nameVariants: string[];
   description: string;
 }
 
@@ -21,51 +23,7 @@ export const INVESTORS: InvestorProfile[] = [
       "kacholia ashish", "rashmi ashish kacholia", "rashmi kacholia",
       "ashish kacholia huf", "lucky investment managers",
     ],
-    description: "Small & mid-cap specialist. Known for high-conviction bets in niche companies.",
-  },
-  {
-    id: "dolly-khanna",
-    name: "Dolly Khanna",
-    trendlyneId: "53671",
-    trendlyneSlug: "dolly-khanna-portfolio",
-    nameVariants: [
-      "dolly khanna", "rajiv khanna", "dolly r khanna",
-      "khanna dolly", "dolly rajiv khanna",
-    ],
-    description: "Chennai-based investor guided by husband Rajiv Khanna. Focuses on textile, sugar, and chemical sectors.",
-  },
-  {
-    id: "vijay-kedia",
-    name: "Vijay Kedia",
-    trendlyneId: "53749",
-    trendlyneSlug: "vijay-kedia-portfolio",
-    nameVariants: [
-      "vijay kedia", "vijay kishanlal kedia", "kedia vijay",
-      "kedia securities", "v kedia",
-    ],
-    description: "SMILE philosophy investor (Small cap, Medium cap, Large cap, Extra-large, Elephant). Deep value player.",
-  },
-  {
-    id: "sunil-singhania",
-    name: "Sunil Singhania",
-    trendlyneId: "53701",
-    trendlyneSlug: "sunil-singhania-portfolio",
-    nameVariants: [
-      "sunil singhania", "abakkus growth fund", "abakkus emerging",
-      "abakkus asset", "singhania sunil",
-    ],
-    description: "Former CIO of Reliance MF. Now runs Abakkus Asset Management. Growth-focused institutional style.",
-  },
-  {
-    id: "rakesh-jhunjhunwala",
-    name: "Rakesh Jhunjhunwala (Estate)",
-    trendlyneId: "53744",
-    trendlyneSlug: "rakesh-jhunjhunwala-and-associates-portfolio",
-    nameVariants: [
-      "rakesh jhunjhunwala", "rekha jhunjhunwala", "rare enterprises",
-      "jhunjhunwala rakesh", "r jhunjhunwala",
-    ],
-    description: "The Big Bull's legacy portfolio, now managed by Rekha Jhunjhunwala and Rare Enterprises.",
+    description: "Small & mid-cap specialist. 48 disclosed holdings worth ~₹2,100+ Cr.",
   },
   {
     id: "mukul-agrawal",
@@ -76,17 +34,52 @@ export const INVESTORS: InvestorProfile[] = [
       "mukul agrawal", "mukul mahavir prasad agrawal",
       "agrawal mukul", "m agrawal",
     ],
-    description: "Ace investor known for mid-cap and small-cap picks. Concentrated portfolio approach.",
+    description: "Ace investor with 40+ disclosed holdings. Concentrated small & mid-cap approach.",
+  },
+  {
+    id: "rakesh-jhunjhunwala",
+    name: "Rakesh Jhunjhunwala (Personal)",
+    trendlyneId: "53744",
+    trendlyneSlug: "rakesh-jhunjhunwala-and-associates-portfolio",
+    nameVariants: [
+      "rakesh jhunjhunwala", "jhunjhunwala rakesh", "r jhunjhunwala",
+    ],
+    description: "The Big Bull's personal holdings (7 stocks). Bulk of portfolio is under Rare Enterprises & Rekha Jhunjhunwala.",
+  },
+  {
+    id: "rare-enterprises",
+    name: "Rare Enterprises (RJ Estate)",
+    trendlyneId: "53799",
+    trendlyneSlug: "rare-enterprises-portfolio",
+    nameVariants: [
+      "rare enterprises", "rare enterprises limited",
+    ],
+    description: "Rakesh Jhunjhunwala's investment vehicle. Manages the bulk of his legacy portfolio.",
+  },
+  {
+    id: "vijay-kedia",
+    name: "Vijay Kedia",
+    trendlyneId: "53749",
+    trendlyneSlug: "vijay-kedia-portfolio",
+    nameVariants: [
+      "vijay kedia", "vijay kishanlal kedia", "kedia vijay",
+      "kedia securities", "v kedia",
+    ],
+    description: "SMILE philosophy investor. Very concentrated — only 3 disclosed >1% holdings.",
+  },
+  {
+    id: "abakkus",
+    name: "Abakkus (Sunil Singhania)",
+    trendlyneId: "53790",
+    trendlyneSlug: "abakkus-growth-fund-1-portfolio",
+    nameVariants: [
+      "sunil singhania", "abakkus growth fund", "abakkus emerging",
+      "abakkus asset",
+    ],
+    description: "Ex-Reliance MF CIO. Trades through Abakkus fund, not personal name. 5 disclosed holdings.",
   },
 ];
 
 export function getInvestorById(id: string): InvestorProfile | undefined {
   return INVESTORS.find(inv => inv.id === id);
-}
-
-export function getInvestorByName(name: string): InvestorProfile | undefined {
-  const lower = name.toLowerCase();
-  return INVESTORS.find(inv =>
-    inv.nameVariants.some(v => lower.includes(v))
-  );
 }
