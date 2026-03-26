@@ -27,6 +27,7 @@ const SECTION_TABS = [
   { id: "overview", label: "Overview", icon: Eye },
   { id: "holdings", label: "All Holdings", icon: BarChart3 },
   { id: "conviction", label: "Conviction", icon: Target },
+  { id: "alpha", label: "Alpha Signals", icon: Zap },
   { id: "deals", label: "Deals & Patterns", icon: FileText },
   { id: "risk", label: "Risk & Performance", icon: Activity },
   { id: "sectors", label: "Sectors", icon: PieChart },
@@ -80,6 +81,20 @@ export default function CommandCenter() {
     queryFn: () => fetch("/api/timeline").then(r => r.json()),
     staleTime: 5 * 60 * 1000,
     enabled: activeSection === "timeline",
+  });
+
+  const { data: signalsData, isLoading: signalsLoading } = useQuery({
+    queryKey: ["signals"],
+    queryFn: () => fetch("/api/signals").then(r => r.json()),
+    staleTime: 15 * 60 * 1000,
+    enabled: activeSection === "alpha",
+  });
+
+  const { data: backtestData, isLoading: backtestLoading } = useQuery({
+    queryKey: ["backtest"],
+    queryFn: () => fetch("/api/backtest").then(r => r.json()),
+    staleTime: 60 * 60 * 1000, // 1 hour cache — backtest is slow
+    enabled: activeSection === "alpha",
   });
 
   const handleScrape = async () => {
@@ -340,6 +355,195 @@ export default function CommandCenter() {
       )}
 
       {/* HOLDINGS */}
+      {/* ALPHA SIGNALS */}
+      {activeSection === "alpha" && (
+        <div className="space-y-4">
+          {/* Backtest Results */}
+          <Card className="border-primary/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Zap className="h-4 w-4 text-primary" />
+                Kacholia Effect — Does Following Him Actually Work?
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Historical analysis of every bulk deal entry. What happened to the stock price after Kacholia bought?
+              </p>
+            </CardHeader>
+            <CardContent>
+              {backtestLoading ? (
+                <div className="flex h-32 items-center justify-center">
+                  <div className="text-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">Running backtest on {deals.length} historical entries...</p>
+                    <p className="text-[10px] text-muted-foreground">Fetching historical prices from Yahoo Finance</p>
+                  </div>
+                </div>
+              ) : backtestData?.totalEntries > 0 ? (
+                <div className="space-y-4">
+                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Avg Return (3M)</p>
+                      <p className={`text-2xl font-bold font-mono ${(backtestData.avgReturn3m || 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                        {backtestData.avgReturn3m !== null ? `${backtestData.avgReturn3m > 0 ? "+" : ""}${backtestData.avgReturn3m}%` : "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Win Rate (3M)</p>
+                      <p className={`text-2xl font-bold font-mono ${(backtestData.winRate3m || 0) >= 50 ? "text-emerald-500" : "text-red-500"}`}>
+                        {backtestData.winRate3m !== null ? `${backtestData.winRate3m}%` : "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Avg Return (1Y)</p>
+                      <p className={`text-2xl font-bold font-mono ${(backtestData.avgReturn1y || 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                        {backtestData.avgReturn1y !== null ? `${backtestData.avgReturn1y > 0 ? "+" : ""}${backtestData.avgReturn1y}%` : "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Entries Analyzed</p>
+                      <p className="text-2xl font-bold font-mono">{backtestData.totalEntries}</p>
+                      <p className="text-[9px] text-muted-foreground">{backtestData.newEntries} new, {backtestData.addOns} add-ons</p>
+                    </div>
+                  </div>
+
+                  {/* Best/Worst */}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {backtestData.bestEntry && (
+                      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                        <p className="text-[10px] text-emerald-600 uppercase font-medium">Best Entry</p>
+                        <p className="font-bold text-emerald-600">{backtestData.bestEntry.symbol} — +{backtestData.bestEntry.returnPct}% ({backtestData.bestEntry.period})</p>
+                      </div>
+                    )}
+                    {backtestData.worstEntry && (
+                      <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                        <p className="text-[10px] text-red-600 uppercase font-medium">Worst Entry</p>
+                        <p className="font-bold text-red-600">{backtestData.worstEntry.symbol} — {backtestData.worstEntry.returnPct}% ({backtestData.worstEntry.period})</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Per-entry table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left pb-1.5 font-medium">Stock</th>
+                          <th className="text-left pb-1.5 font-medium">Entry Date</th>
+                          <th className="text-right pb-1.5 font-medium">Entry ₹</th>
+                          <th className="text-right pb-1.5 font-medium">+1W</th>
+                          <th className="text-right pb-1.5 font-medium">+1M</th>
+                          <th className="text-right pb-1.5 font-medium">+3M</th>
+                          <th className="text-right pb-1.5 font-medium">+6M</th>
+                          <th className="text-right pb-1.5 font-medium">+1Y</th>
+                          <th className="text-right pb-1.5 font-medium">Now</th>
+                          <th className="text-left pb-1.5 font-medium">Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(backtestData.entries || []).map((e: Record<string, unknown>, i: number) => (
+                          <tr key={i} className="border-b last:border-0 hover:bg-accent/50">
+                            <td className="py-1.5">
+                              <Link href={`/stock/${e.symbol}`} className="font-medium text-primary hover:underline">{e.symbol as string}</Link>
+                            </td>
+                            <td className="py-1.5 text-muted-foreground">{e.entryDate as string}</td>
+                            <td className="py-1.5 text-right font-mono">₹{(e.entryPrice as number)?.toFixed(0)}</td>
+                            {[e.return1w, e.return1m, e.return3m, e.return6m, e.return1y].map((r, j) => (
+                              <td key={j} className={`py-1.5 text-right font-mono ${r === null ? "text-muted-foreground" : (r as number) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                {r !== null ? `${(r as number) > 0 ? "+" : ""}${r}%` : "—"}
+                              </td>
+                            ))}
+                            <td className={`py-1.5 text-right font-mono font-semibold ${(e.currentReturn as number) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                              {(e.currentReturn as number) > 0 ? "+" : ""}{e.currentReturn as number}%
+                            </td>
+                            <td className="py-1.5">
+                              <Badge variant="outline" className={`text-[9px] ${e.isNewEntry ? "text-primary" : ""}`}>
+                                {e.isNewEntry ? "New Entry" : "Add-on"}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No deal data to backtest. Run a Trendlyne scrape first.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* AI Signal Dashboard */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Brain className="h-4 w-4 text-primary" />
+                AI Signal Analyst
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {signalsData?.signals?.[0]?.aiAvailable
+                  ? "Claude AI analyzes each stock and generates actionable buy/hold/avoid signals"
+                  : "Rule-based signal analysis (add AWS Bedrock credentials for AI-powered analysis)"}
+              </p>
+            </CardHeader>
+            <CardContent>
+              {signalsLoading ? (
+                <div className="flex h-32 items-center justify-center">
+                  <div className="text-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">Analyzing {holdings.length} stocks...</p>
+                  </div>
+                </div>
+              ) : (signalsData?.signals || []).length > 0 ? (
+                <div className="space-y-2">
+                  {(signalsData.signals as Array<Record<string, unknown>>).map((s, i) => {
+                    const signalColors: Record<string, string> = {
+                      STRONG_BUY: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+                      BUY: "bg-green-500/10 text-green-600 border-green-500/20",
+                      HOLD: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+                      CAUTION: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+                      AVOID: "bg-red-500/10 text-red-600 border-red-500/20",
+                    };
+                    const color = signalColors[s.signal as string] || signalColors.HOLD;
+                    return (
+                      <div key={i} className={`rounded-lg border p-3 ${color}`}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge className={`${color} text-xs font-bold`}>{s.signal as string}</Badge>
+                            <Link href={`/stock/${s.symbol}`} className="font-semibold text-sm hover:underline">{s.symbol as string}</Link>
+                            <span className="text-xs text-muted-foreground">{s.name as string}</span>
+                          </div>
+                          <span className="text-xs font-mono text-muted-foreground">{s.confidence as number}% confidence</span>
+                        </div>
+                        <p className="text-xs mt-1.5 leading-relaxed">{s.summary as string}</p>
+                        {(s.entryStrategy as string) ? (
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            <span className="font-medium">Strategy:</span> {s.entryStrategy as string}
+                          </p>
+                        ) : null}
+                        {(s.targetReturn as string) ? (
+                          <p className="text-[10px] text-muted-foreground">
+                            <span className="font-medium">Target:</span> {s.targetReturn as string}
+                          </p>
+                        ) : null}
+                        {(s.riskFactors as string[])?.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {(s.riskFactors as string[]).slice(0, 3).map((r, j) => (
+                              <span key={j} className="text-[9px] text-muted-foreground bg-background/50 rounded px-1.5 py-0.5">{r}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No signals generated yet.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {activeSection === "holdings" && (
         <div>
           {insightsLoading ? (
