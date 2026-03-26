@@ -16,7 +16,7 @@ import Link from "next/link";
 import {
   RefreshCw, Loader2, CheckCircle, AlertTriangle, XCircle,
   TrendingUp, TrendingDown, BarChart3, Target, PieChart, FileText,
-  Activity, Brain, Zap, Eye,
+  Activity, Brain, Zap, Eye, Clock, LogIn, LogOut, ArrowDownCircle, ArrowUpCircle,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -30,6 +30,7 @@ const SECTION_TABS = [
   { id: "deals", label: "Deals & Patterns", icon: FileText },
   { id: "risk", label: "Risk & Performance", icon: Activity },
   { id: "sectors", label: "Sectors", icon: PieChart },
+  { id: "timeline", label: "Timeline", icon: Clock },
 ] as const;
 
 type SectionId = (typeof SECTION_TABS)[number]["id"];
@@ -72,6 +73,13 @@ export default function CommandCenter() {
     queryKey: ["health"],
     queryFn: () => fetch("/api/health").then(r => r.json()),
     refetchInterval: 15_000,
+  });
+
+  const { data: timelineData } = useQuery({
+    queryKey: ["timeline"],
+    queryFn: () => fetch("/api/timeline").then(r => r.json()),
+    staleTime: 5 * 60 * 1000,
+    enabled: activeSection === "timeline",
   });
 
   const handleScrape = async () => {
@@ -487,13 +495,89 @@ export default function CommandCenter() {
         </div>
       )}
 
+      {/* TIMELINE */}
+      {activeSection === "timeline" && (
+        <div className="space-y-3">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Activity Timeline</CardTitle>
+              <p className="text-xs text-muted-foreground">Every entry, addition, partial exit, and full exit — reconstructed from deal history</p>
+            </CardHeader>
+            <CardContent>
+              {!timelineData?.events || timelineData.events.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">No timeline events yet. Run a scrape to populate deal history.</p>
+              ) : (
+                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  {(timelineData.events as Array<Record<string, unknown>>).slice(0, 30).map((e, i) => {
+                    const type = e.eventType as string;
+                    const Icon = type === "entry" ? LogIn : type === "add" ? ArrowDownCircle : type === "full_exit" ? LogOut : ArrowUpCircle;
+                    const color = type === "entry" ? "bg-blue-100 text-blue-800" : type === "add" ? "bg-green-100 text-green-800" : type === "full_exit" ? "bg-red-100 text-red-800" : "bg-orange-100 text-orange-800";
+                    return (
+                      <div key={i} className="flex items-center gap-3 border-b pb-2 last:border-0 text-xs">
+                        <Badge className={`${color} text-[9px] gap-0.5 w-24 justify-center`}>
+                          <Icon className="h-3 w-3" /> {type.replace("_", " ")}
+                        </Badge>
+                        <Link href={`/stock/${e.symbol}`} className="font-medium text-primary hover:underline w-20 truncate">{e.symbol as string}</Link>
+                        <span className="text-muted-foreground">{e.eventDate as string}</span>
+                        <span className="font-mono">{(e.sharesBefore as number)?.toLocaleString("en-IN")} → {(e.sharesAfter as number)?.toLocaleString("en-IN")}</span>
+                        {e.priceAtEvent ? <span className="font-mono text-muted-foreground">@ ₹{(e.priceAtEvent as number).toFixed(0)}</span> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* P&L Tracker */}
+          {timelineData?.pnl && (timelineData.pnl as Array<Record<string, unknown>>).length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">P&L Per Stock</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left pb-1.5 font-medium">Stock</th>
+                        <th className="text-right pb-1.5 font-medium">Shares</th>
+                        <th className="text-right pb-1.5 font-medium">Avg Buy</th>
+                        <th className="text-right pb-1.5 font-medium">CMP</th>
+                        <th className="text-right pb-1.5 font-medium">Value (Cr)</th>
+                        <th className="text-right pb-1.5 font-medium">P&L %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(timelineData.pnl as Array<Record<string, unknown>>).slice(0, 20).map((p, i) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-1.5">
+                            <Link href={`/stock/${p.symbol}`} className="font-medium text-primary hover:underline">{p.symbol as string}</Link>
+                          </td>
+                          <td className="text-right font-mono">{(p.currentShares as number)?.toLocaleString("en-IN")}</td>
+                          <td className="text-right font-mono">₹{(p.avgBuyPrice as number)?.toFixed(0) || "—"}</td>
+                          <td className="text-right font-mono">₹{(p.currentPrice as number)?.toFixed(0)}</td>
+                          <td className="text-right font-mono">₹{((p.currentValue as number) / 1e7).toFixed(1)}</td>
+                          <td className={`text-right font-mono font-semibold ${(p.unrealizedPnLPct as number) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                            {(p.unrealizedPnLPct as number) != null ? `${(p.unrealizedPnLPct as number) > 0 ? "+" : ""}${(p.unrealizedPnLPct as number)?.toFixed(1)}%` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
       {/* Footer bar */}
       <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t pt-2">
         <span>Quarter: {quarter} | Prices refresh every 5 min | {insightsData?.computedAt ? `Insights: ${new Date(insightsData.computedAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}` : ""}</span>
         <div className="flex gap-3">
           <Link href="/sources" className="hover:text-foreground">17 Sources</Link>
           <Link href="/bigbulls" className="hover:text-foreground">Big Bulls</Link>
-          <Link href="/timeline" className="hover:text-foreground">Timeline</Link>
         </div>
       </div>
     </div>
