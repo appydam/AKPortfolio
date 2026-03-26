@@ -124,76 +124,86 @@ export default function CommandCenter() {
   return (
     <div className="mx-auto max-w-[1400px] p-3 md:p-4 space-y-3">
       {/* ─── HERO HEADER ─── */}
-      <div className="rounded-xl border-2 border-primary/20 bg-gradient-to-r from-primary/5 via-background to-primary/5 p-4 md:p-5">
-        <div className="flex items-start justify-between">
+      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-background to-primary/5 p-5 md:p-6">
+        {/* Subtle glow effect */}
+        <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
+        <div className="absolute -bottom-16 -left-16 h-32 w-32 rounded-full bg-primary/5 blur-2xl" />
+
+        <div className="relative flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Brain className="h-6 w-6 text-primary" />
-              <h1 className="text-xl md:text-2xl font-bold tracking-tight">Ashish Kacholia — Intelligence Terminal</h1>
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20">
+                <Brain className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight">Ashish Kacholia</h1>
+                <p className="text-[11px] text-primary/70 font-medium -mt-0.5">Intelligence Terminal</p>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              17 sources | 19 intelligence layers | 4 entities tracked | Real-time surveillance
-            </p>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">17 Sources</Badge>
+              <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">19 Intelligence Layers</Badge>
+              <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">4 Entities Tracked</Badge>
+              {overallHealth && (
+                <Link href="/health">
+                  <Badge variant="outline" className="gap-1 text-[10px] cursor-pointer hover:bg-accent">
+                    {healthIcon} {overallHealth.healthy}/{overallHealth.total} live
+                  </Badge>
+                </Link>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {overallHealth && (
-              <Link href="/health">
-                <Badge variant="outline" className="gap-1 text-[10px] cursor-pointer hover:bg-accent">
-                  {healthIcon} {overallHealth.healthy}/{overallHealth.total}
-                </Badge>
-              </Link>
-            )}
-            <Button variant="outline" size="sm" onClick={handleScrape} disabled={scraping} className="h-7 text-xs">
-              {scraping ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
-              {scraping ? "..." : "Refresh"}
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={handleScrape} disabled={scraping} className="h-8 text-xs">
+            {scraping ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            {scraping ? "Scraping..." : "Refresh Data"}
+          </Button>
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
-          <div className="rounded-lg bg-background/80 border p-2.5">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Portfolio Value</p>
-            <p className="text-lg md:text-xl font-bold font-mono">
-              {totalValue > 0 ? `₹${(totalValue / 1e7).toFixed(0)} Cr` : "—"}
+        <div className="relative grid grid-cols-2 md:grid-cols-6 gap-2.5 mt-5">
+          <div className="rounded-lg bg-card/80 backdrop-blur border p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Portfolio</p>
+            <p className="text-xl md:text-2xl font-bold font-mono tracking-tight">
+              {totalValue > 0 ? `₹${(totalValue / 1e7).toFixed(0)}` : "—"}
+              <span className="text-xs font-normal text-muted-foreground ml-0.5">Cr</span>
             </p>
           </div>
-          <div className="rounded-lg bg-background/80 border p-2.5">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Today</p>
-            <p className={`text-lg md:text-xl font-bold font-mono ${avgChange >= 0 ? "text-green-600" : "text-red-600"}`}>
+          <div className="rounded-lg bg-card/80 backdrop-blur border p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Today</p>
+            <p className={`text-xl md:text-2xl font-bold font-mono tracking-tight ${avgChange >= 0 ? "text-emerald-500" : "text-red-500"}`}>
               {avgChange >= 0 ? "+" : ""}{avgChange.toFixed(2)}%
             </p>
           </div>
-          <div className="rounded-lg bg-background/80 border p-2.5">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Holdings</p>
-            <p className="text-lg md:text-xl font-bold font-mono">{holdings.length}</p>
+          <div className="rounded-lg bg-card/80 backdrop-blur border p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Stocks</p>
+            <p className="text-xl md:text-2xl font-bold font-mono tracking-tight">{holdings.length}</p>
           </div>
-          <div className="rounded-lg bg-background/80 border p-2.5">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Gainers/Losers</p>
-            <p className="text-lg md:text-xl font-bold">
-              <span className="text-green-600">{gainers}</span>
-              <span className="text-muted-foreground mx-1">/</span>
-              <span className="text-red-600">{losers}</span>
+          <div className="rounded-lg bg-card/80 backdrop-blur border p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Gainers / Losers</p>
+            <p className="text-xl md:text-2xl font-bold font-mono tracking-tight">
+              <span className="text-emerald-500">{gainers}</span>
+              <span className="text-muted-foreground/50 mx-0.5">/</span>
+              <span className="text-red-500">{losers}</span>
             </p>
           </div>
-          <div className="rounded-lg bg-background/80 border p-2.5">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Entry Quality</p>
-            <p className="text-lg md:text-xl font-bold">
-              <span className="text-green-600">{excellentEntries}</span>
-              <span className="text-muted-foreground text-xs mx-1">exc</span>
-              <span className="text-blue-600">{goodEntries}</span>
-              <span className="text-muted-foreground text-xs ml-1">good</span>
+          <div className="rounded-lg bg-card/80 backdrop-blur border p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Entry Quality</p>
+            <p className="text-xl md:text-2xl font-bold font-mono tracking-tight">
+              <span className="text-emerald-500">{excellentEntries}</span>
+              <span className="text-[10px] font-normal text-muted-foreground mx-0.5">exc</span>
+              <span className="text-blue-500">{goodEntries}</span>
+              <span className="text-[10px] font-normal text-muted-foreground ml-0.5">good</span>
             </p>
           </div>
-          <div className="rounded-lg bg-background/80 border p-2.5">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Deals Tracked</p>
-            <p className="text-lg md:text-xl font-bold font-mono">{dealsData?.total || 0}</p>
+          <div className="rounded-lg bg-card/80 backdrop-blur border p-3">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Deals</p>
+            <p className="text-xl md:text-2xl font-bold font-mono tracking-tight">{dealsData?.total || 0}</p>
           </div>
         </div>
       </div>
 
       {/* ─── SECTION TABS ─── */}
-      <div className="flex gap-1 overflow-x-auto pb-1 border-b">
+      <div className="flex gap-1 overflow-x-auto pb-1 border-b border-border/50">
         {SECTION_TABS.map((tab) => {
           const Icon = tab.icon;
           return (

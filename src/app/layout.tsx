@@ -33,7 +33,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <Providers>
           <Nav />
-          <main className="flex-1 bg-muted/30">{children}</main>
+          <main className="flex-1 bg-background">{children}</main>
         </Providers>
       </body>
     </html>
