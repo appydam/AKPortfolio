@@ -19,14 +19,14 @@ interface ChatMessage {
 
 // ── Suggested prompts ──────────────────────────────────────────────────────
 const SUGGESTED = [
-  "Which stock should I add more of right now?",
-  "Which stocks are dragging my portfolio down?",
-  "Am I taking too much risk?",
+  "Which Big Bull am I most similar to?",
+  "What consensus picks am I missing?",
+  "What should I buy/sell right now?",
+  "Rate my portfolio diversification",
+  "Which stocks are dragging me down?",
+  "Where am I taking contrarian bets?",
   "What would AK do with my portfolio?",
-  "Should I book profits on any position?",
-  "Which MF is underperforming vs my stocks?",
-  "What's my single biggest mistake?",
-  "How diversified am I really?",
+  "Compare my risk vs Big Bulls",
 ];
 
 // ── Markdown renderer ──────────────────────────────────────────────────────

@@ -17,6 +17,7 @@ import {
   RefreshCw, Loader2, CheckCircle, AlertTriangle, XCircle,
   TrendingUp, TrendingDown, BarChart3, Target, PieChart, FileText,
   Activity, Brain, Zap, Eye, Clock, LogIn, LogOut, ArrowDownCircle, ArrowUpCircle,
+  Copy, Calendar,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -28,6 +29,8 @@ const SECTION_TABS = [
   { id: "holdings", label: "All Holdings", icon: BarChart3 },
   { id: "conviction", label: "Conviction", icon: Target },
   { id: "alpha", label: "Alpha Signals", icon: Zap },
+  { id: "copy", label: "Copy Portfolio", icon: Copy },
+  { id: "earnings", label: "Earnings Calendar", icon: Calendar },
   { id: "deals", label: "Deals & Patterns", icon: FileText },
   { id: "risk", label: "Risk & Performance", icon: Activity },
   { id: "sectors", label: "Sectors", icon: PieChart },
@@ -95,6 +98,22 @@ export default function CommandCenter() {
     queryFn: () => fetch("/api/backtest").then(r => r.json()),
     staleTime: 60 * 60 * 1000, // 1 hour cache — backtest is slow
     enabled: activeSection === "alpha",
+  });
+
+  const [copyAmount, setCopyAmount] = useState(500000);
+  const [copyMode, setCopyMode] = useState("proportional");
+  const { data: copyData, isLoading: copyLoading, refetch: refetchCopy } = useQuery({
+    queryKey: ["copy-portfolio", copyAmount, copyMode],
+    queryFn: () => fetch(`/api/copy-portfolio?amount=${copyAmount}&mode=${copyMode}`).then(r => r.json()),
+    staleTime: 5 * 60 * 1000,
+    enabled: activeSection === "copy",
+  });
+
+  const { data: earningsData, isLoading: earningsLoading } = useQuery({
+    queryKey: ["earnings"],
+    queryFn: () => fetch("/api/earnings").then(r => r.json()),
+    staleTime: 30 * 60 * 1000,
+    enabled: activeSection === "earnings",
   });
 
   const handleScrape = async () => {
@@ -603,6 +622,200 @@ export default function CommandCenter() {
               </CardContent>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* COPY PORTFOLIO */}
+      {activeSection === "copy" && (
+        <div className="space-y-4">
+          <Card className="border-primary/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Copy className="h-4 w-4 text-primary" />
+                Copy Kacholia&apos;s Portfolio
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Enter your investment amount and we&apos;ll calculate exactly how many shares of each stock to buy to replicate his portfolio.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3 items-end mb-4">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Investment Amount</label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm text-muted-foreground">₹</span>
+                    <input
+                      type="number"
+                      value={copyAmount}
+                      onChange={(e) => setCopyAmount(Number(e.target.value) || 100000)}
+                      className="w-40 rounded-md border bg-background px-3 py-1.5 text-sm font-mono"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  {[100000, 500000, 1000000, 2500000, 5000000].map(amt => (
+                    <button
+                      key={amt}
+                      onClick={() => setCopyAmount(amt)}
+                      className={`rounded px-2 py-1.5 text-[10px] border transition-colors ${copyAmount === amt ? "bg-primary/10 text-primary border-primary/20" : "hover:bg-accent"}`}
+                    >
+                      {amt >= 1e7 ? `${amt / 1e7} Cr` : amt >= 1e5 ? `${amt / 1e5} L` : `${amt / 1e3}K`}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Mode</label>
+                  <div className="flex gap-1">
+                    {[
+                      { id: "proportional", label: "Mirror His Weights" },
+                      { id: "conviction", label: "By Conviction" },
+                      { id: "equal", label: "Equal Weight" },
+                    ].map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => setCopyMode(m.id)}
+                        className={`rounded px-2.5 py-1.5 text-[10px] border transition-colors ${copyMode === m.id ? "bg-primary/10 text-primary border-primary/20" : "hover:bg-accent"}`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => refetchCopy()}>Calculate</Button>
+              </div>
+
+              {copyLoading ? (
+                <div className="flex h-32 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : copyData?.allocations ? (
+                <div className="space-y-4">
+                  {/* Summary */}
+                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+                    <div className="rounded-lg border p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Total Invested</p>
+                      <p className="text-lg font-bold font-mono">₹{(copyData.totalInvested / (copyData.totalInvested >= 1e5 ? 1e5 : 1)).toFixed(copyData.totalInvested >= 1e5 ? 1 : 0)}{copyData.totalInvested >= 1e5 ? "L" : ""}</p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Stocks to Buy</p>
+                      <p className="text-lg font-bold font-mono">{copyData.totalStocks}</p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">Cash Remaining</p>
+                      <p className="text-lg font-bold font-mono">₹{copyData.cashRemaining?.toLocaleString("en-IN")}</p>
+                    </div>
+                    <div className="rounded-lg border p-3 text-center">
+                      <p className="text-[10px] text-muted-foreground uppercase">AK Portfolio</p>
+                      <p className="text-lg font-bold font-mono">₹{(copyData.kacholiaPortfolioValue / 1e7).toFixed(0)} Cr</p>
+                    </div>
+                  </div>
+
+                  {/* Allocation table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left pb-1.5 font-medium">Stock</th>
+                          <th className="text-left pb-1.5 font-medium">Sector</th>
+                          <th className="text-right pb-1.5 font-medium">Price</th>
+                          <th className="text-right pb-1.5 font-medium">Shares to Buy</th>
+                          <th className="text-right pb-1.5 font-medium">Your Investment</th>
+                          <th className="text-right pb-1.5 font-medium">AK Weight</th>
+                          <th className="text-right pb-1.5 font-medium">Conviction</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(copyData.allocations as Array<Record<string, unknown>>).map((a, i) => (
+                          <tr key={i} className="border-b last:border-0 hover:bg-accent/50">
+                            <td className="py-1.5">
+                              <Link href={`/stock/${a.symbol}`} className="font-medium text-primary hover:underline">{a.symbol as string}</Link>
+                              <span className="text-muted-foreground ml-1 text-[10px]">{(a.name as string).substring(0, 20)}</span>
+                            </td>
+                            <td className="py-1.5 text-muted-foreground">{a.sector as string}</td>
+                            <td className="py-1.5 text-right font-mono">₹{(a.price as number)?.toFixed(0)}</td>
+                            <td className="py-1.5 text-right font-mono font-semibold text-primary">{(a.yourShares as number)?.toLocaleString("en-IN")}</td>
+                            <td className="py-1.5 text-right font-mono">₹{(a.yourInvestment as number)?.toLocaleString("en-IN")}</td>
+                            <td className="py-1.5 text-right text-muted-foreground">{a.kacholiaWeight as number}%</td>
+                            <td className="py-1.5 text-right">
+                              <span className={`font-mono ${(a.convictionScore as number) >= 30 ? "text-emerald-500" : "text-muted-foreground"}`}>{a.convictionScore as number}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground">
+                    Disclaimer: This is for educational purposes only. Not financial advice. Always do your own research before investing. Small-cap stocks are volatile.
+                  </p>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* EARNINGS CALENDAR */}
+      {activeSection === "earnings" && (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-primary" />
+                Earnings Calendar — Kacholia&apos;s Portfolio
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Upcoming board meetings and result dates for all his holdings. Earnings are the #1 price catalyst for small caps — know BEFORE the move.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {earningsLoading ? (
+                <div className="flex h-32 items-center justify-center">
+                  <div className="text-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">Fetching earnings dates for portfolio stocks...</p>
+                  </div>
+                </div>
+              ) : (earningsData?.events || []).length > 0 ? (
+                <div className="space-y-2">
+                  {(earningsData.events as Array<Record<string, unknown>>).map((e, i) => {
+                    const daysUntil = e.daysUntil as number;
+                    const isUpcoming = e.isUpcoming as boolean;
+                    const urgencyColor = isUpcoming
+                      ? daysUntil <= 3 ? "border-red-500/30 bg-red-500/5" : daysUntil <= 7 ? "border-amber-500/30 bg-amber-500/5" : "border-primary/20 bg-primary/5"
+                      : "border-border";
+                    return (
+                      <div key={i} className={`rounded-lg border p-3 ${urgencyColor}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Link href={`/stock/${e.symbol}`} className="font-semibold text-sm text-primary hover:underline">{e.symbol as string}</Link>
+                            <span className="text-xs text-muted-foreground">{e.name as string}</span>
+                            <Badge variant="outline" className="text-[9px]">{e.sector as string}</Badge>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-mono">{e.meetingDate as string}</p>
+                            <p className={`text-[10px] font-medium ${isUpcoming ? daysUntil <= 3 ? "text-red-500" : daysUntil <= 7 ? "text-amber-500" : "text-primary" : "text-muted-foreground"}`}>
+                              {isUpcoming ? `in ${daysUntil} days` : `${Math.abs(daysUntil)} days ago`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
+                          <span>{e.purpose as string}</span>
+                          <span>AK weight: {e.kacholiaWeight as number}%</span>
+                          <span>CMP: ₹{(e.currentPrice as number)?.toFixed(0)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  <p className="font-medium">No upcoming earnings found</p>
+                  <p className="text-xs mt-1">Earnings data is fetched from NSE corporate filings. Run the board-meetings cron job to populate.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 

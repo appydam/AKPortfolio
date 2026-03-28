@@ -88,29 +88,41 @@ ${mfLines}
 - Stocks only I hold (not AK): ${onlyMine || 'None'}
 - AK stocks I'm missing (top 15): ${onlyAK || 'None'}
 
+### Big Bull Investor Data
+I also track 6 legendary Indian investors. Here's how my portfolio relates to theirs:
+- **Ashish Kacholia** — Small & mid-cap specialist, ~48 holdings worth ₹2,100+ Cr
+- **Mukul Agrawal** — Concentrated small & mid-cap, 40+ holdings
+- **Rakesh Jhunjhunwala (Personal)** — Legacy personal holdings (7 stocks)
+- **Rare Enterprises (RJ Estate)** — Bulk of Jhunjhunwala portfolio
+- **Vijay Kedia** — SMILE philosophy, very concentrated
+- **Abakkus (Sunil Singhania)** — Ex-Reliance MF CIO, fund-based
+
 ## WHAT I NEED FROM YOU
 
 Please structure your response with these sections using markdown:
 
-### 🎯 Portfolio Verdict
+### Portfolio Verdict
 2-3 sentence honest overall assessment. Don't sugarcoat.
 
-### 💪 What's Working
+### What's Working
 My top 2-3 strongest positions with specific numbers and WHY they're strong.
 
-### ⚠️ Danger Zones
+### Danger Zones
 My 2-3 biggest risks or underperformers I should be worried about. Be blunt.
 
-### 🔥 Immediate Action Items
+### Immediate Action Items
 3-5 specific, numbered, actionable things I should do THIS WEEK. Not vague advice — specific stocks to buy more of, cut, or watch.
 
-### 📊 AK Strategy Gap
-What is Ashish Kacholia doing that I'm not? What can I learn from his portfolio vs mine?
+### Your Portfolio DNA
+Which Big Bull investor's strategy am I closest to, and what does that say about my investing style? What can I learn from the gaps?
 
-### 🧠 Hidden Insights
+### Consensus Picks You're Missing
+Stocks held by multiple Big Bull investors that I don't own. Why should I (or shouldn't I) consider them?
+
+### Hidden Insights
 2-3 non-obvious patterns or insights from my data that I probably haven't noticed.
 
-### 🎯 6-Month Game Plan
+### 6-Month Game Plan
 Concrete steps for the next 6 months to improve my portfolio performance.
 
 Be specific, use the actual stock names and numbers from my data. Talk to me like a friend who knows markets, not like a disclaimer-heavy advisor.`;

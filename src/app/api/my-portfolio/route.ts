@@ -1,14 +1,56 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAggregatedPrices } from "@/lib/prices/aggregator";
 import myHoldingsData from "@/data/my-holdings.json";
 
-export async function GET() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RawHoldings = { user: string; user_id?: string; synced_at: string; holdings: any[]; mutual_funds?: any[] };
+
+async function loadPortfolioData(portfolioId: string | null): Promise<RawHoldings> {
+  if (!portfolioId) return myHoldingsData as RawHoldings;
+
+  const db = getDb();
+  const { data, error } = await db
+    .from("user_portfolios")
+    .select("*")
+    .eq("id", portfolioId)
+    .single();
+
+  if (error || !data) throw new Error("Portfolio not found");
+
+  const holdings = typeof data.holdings === "string" ? JSON.parse(data.holdings) : data.holdings;
+  const mutualFunds = data.mutual_funds
+    ? (typeof data.mutual_funds === "string" ? JSON.parse(data.mutual_funds) : data.mutual_funds)
+    : [];
+
+  return {
+    user: data.name || "My Portfolio",
+    synced_at: data.updated_at ? new Date(data.updated_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    holdings: holdings.map((h: Record<string, unknown>) => ({
+      symbol: h.symbol,
+      exchange: h.exchange || "NSE",
+      quantity: h.quantity,
+      average_price: h.avgPrice ?? h.average_price ?? 0,
+      last_price: h.lastPrice ?? h.last_price ?? 0,
+      close_price: h.closePrice ?? h.close_price ?? 0,
+      pnl: h.pnl ?? 0,
+      day_change_pct: h.dayChangePct ?? h.day_change_pct ?? 0,
+    })),
+    mutual_funds: mutualFunds,
+  };
+}
+
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const portfolioId = searchParams.get("id");
+    const sourceData = await loadPortfolioData(portfolioId);
+
     // --- My Mutual Funds (Coin) ---
-    const mfHoldings = (myHoldingsData.mutual_funds || []).map((mf) => {
-      const invested = mf.quantity * mf.average_price;
-      const current = mf.quantity * mf.last_price;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mfHoldings = (sourceData.mutual_funds || []).map((mf: any) => {
+      const invested = (mf.quantity || 0) * (mf.average_price || 0);
+      const current = (mf.quantity || 0) * (mf.last_price || 0);
       return {
         fund: mf.fund,
         folio: mf.folio,
@@ -27,10 +69,11 @@ export async function GET() {
     const mfTotalCurrent = mfHoldings.reduce((s, h) => s + h.currentValue, 0);
 
     // --- My (Zerodha) stock holdings ---
-    const myHoldings = myHoldingsData.holdings.map((h) => {
-      const invested = h.quantity * h.average_price;
-      const current = h.quantity * h.last_price;
-      const dayPnl = (h.last_price - h.close_price) * h.quantity;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const myHoldings = sourceData.holdings.map((h: any) => {
+      const invested = (h.quantity || 0) * (h.average_price || 0);
+      const current = (h.quantity || 0) * (h.last_price || 0);
+      const dayPnl = ((h.last_price || 0) - (h.close_price || 0)) * (h.quantity || 0);
       return {
         symbol: h.symbol,
         exchange: h.exchange,
@@ -450,8 +493,8 @@ export async function GET() {
     // RESPONSE
     // =========================================
     return NextResponse.json({
-      user: myHoldingsData.user,
-      syncedAt: myHoldingsData.synced_at,
+      user: sourceData.user,
+      syncedAt: sourceData.synced_at,
       my: {
         holdings: myHoldings,
         totalInvested: myTotalInvested,
